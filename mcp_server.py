@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from mcp.server import MCPServer
+from mcp.types import ToolAnnotations
 
 from services.azure_graph import (
     get_environment_summary as azure_get_environment_summary,
@@ -108,13 +109,27 @@ mcp = MCPServer(
     ),
 )
 
+# Todas as tools deste servidor são somente leitura por design. A anotação
+# readOnlyHint evita que o cliente MCP peça confirmação a cada chamada.
+_READ_ONLY = ToolAnnotations(
+    readOnlyHint=True,
+    idempotentHint=True,
+    openWorldHint=True,
+)
 
-@mcp.tool()
+
+def read_only_tool(*args, **kwargs):
+    """Registra uma tool somente leitura."""
+    kwargs.setdefault("annotations", _READ_ONLY)
+    return mcp.tool(*args, **kwargs)
+
+
+@read_only_tool()
 def get_environment_summary() -> dict:
     """Get a read-only high-level snapshot of the accessible Azure environment."""
     return azure_get_environment_summary()
 
-@mcp.tool()
+@read_only_tool()
 def get_subscriptions_count() -> dict:
     """
     Retorna exclusivamente a quantidade de subscriptions Azure
@@ -130,19 +145,19 @@ def get_subscriptions_count() -> dict:
     return azure_get_subscriptions_count()
 
 
-@mcp.tool()
+@read_only_tool()
 def get_resource_groups_count() -> dict:
     """Retorna a quantidade de Resource Groups visíveis no escopo autenticado."""
     return identity_get_resource_groups_count()
 
 
-@mcp.tool()
+@read_only_tool()
 def list_resource_groups(name_contains: str = "", limit: int = 20) -> dict:
     """Lista Resource Groups com filtros read-only por nome."""
     return identity_list_resource_groups(name_contains=name_contains, limit=limit)
 
 
-@mcp.tool()
+@read_only_tool()
 def get_identity_access_summary() -> dict:
     """
     Retorna resumo de identidade e RBAC:
@@ -154,25 +169,25 @@ def get_identity_access_summary() -> dict:
     return identity_get_identity_access_summary()
 
 
-@mcp.tool()
+@read_only_tool()
 def list_users(limit: int = 20, disabled_only: bool = False, name_contains: str = "") -> dict:
     """Lista usuários do Entra ID visíveis para a identidade autenticada."""
     return identity_list_users(limit=limit, disabled_only=disabled_only, name_contains=name_contains)
 
 
-@mcp.tool()
+@read_only_tool()
 def list_users_with_direct_permissions(limit: int = 20, disabled_only: bool = False) -> dict:
     """Lista usuários com role assignments diretos no Azure RBAC."""
     return identity_list_users_with_direct_permissions(limit=limit, disabled_only=disabled_only)
 
 
-@mcp.tool()
+@read_only_tool()
 def list_disabled_users_with_active_roles(limit: int = 20) -> dict:
     """Lista usuários desabilitados no Entra ID que ainda possuem role assignments diretos ativos."""
     return identity_list_disabled_users_with_active_roles(limit=limit)
 
 
-@mcp.tool()
+@read_only_tool()
 def list_entra_users(limit: int = 20) -> dict:
     """Lista usuários do Microsoft Entra ID com nome, UPN e e-mail."""
     users = entra_list_users()
@@ -191,21 +206,21 @@ def list_entra_users(limit: int = 20) -> dict:
     return {"count": len(rows), "users": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def list_azure_role_assignments(limit: int = 50) -> dict:
     """Lista role assignments Azure RBAC (User, Group, Service Principal e Managed Identity)."""
     rows = azure_list_role_assignments()[: max(1, min(int(limit), 200))]
     return {"count": len(rows), "assignments": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def list_privileged_azure_role_assignments(limit: int = 50) -> dict:
     """Lista role assignments privilegiados em Azure RBAC (Owner, User Access Administrator, Contributor)."""
     rows = azure_list_privileged_role_assignments()[: max(1, min(int(limit), 200))]
     return {"count": len(rows), "assignments": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def get_role_risk_score(role: str, provider: str, scope: str = "/", state: str = "") -> dict:
     """Calcula score de risco (0-100) para uma role privilegiada de Entra ID ou Azure RBAC."""
     score = role_risk_score(role=role, provider=provider, scope=scope, state=state)
@@ -220,7 +235,7 @@ def get_role_risk_score(role: str, provider: str, scope: str = "/", state: str =
     }
 
 
-@mcp.tool()
+@read_only_tool()
 def list_agent_identities(status: str = "all", limit: int = 50) -> dict:
     """Lista inventário de Agent Identities com owner, blueprint, permissões e risco."""
     try:
@@ -239,7 +254,7 @@ def list_agent_identities(status: str = "all", limit: int = 50) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def get_agent_relationships(agent_identifier: str) -> dict:
     """Resolve Agent → Owners → Identity → Blueprint → Graph Permissions → Azure RBAC."""
     try:
@@ -254,7 +269,7 @@ def get_agent_relationships(agent_identifier: str) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def get_agents_by_owner(owner_identifier: str, limit: int = 50) -> dict:
     """Lista Agents sob responsabilidade de um owner (UPN, nome ou objectId)."""
     try:
@@ -271,7 +286,7 @@ def get_agents_by_owner(owner_identifier: str, limit: int = 50) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def get_user_effective_azure_access(user_identifier: str, limit: int = 200) -> dict:
     """Resolve acesso efetivo Azure RBAC de um usuário (direto + herdado via grupos transitive)."""
     try:
@@ -286,14 +301,14 @@ def get_user_effective_azure_access(user_identifier: str, limit: int = 200) -> d
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def list_orphan_azure_role_assignments(limit: int = 200) -> dict:
     """Lista role assignments órfãos (principal não resolvido no tenant visível)."""
     rows = effective_list_orphan_role_assignments(limit=limit)
     return {"count": len(rows), "assignments": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def list_privilege_timeline_events(days: int = 30, provider: str = "all", action: str = "all", limit: int = 200) -> dict:
     """Lista eventos de ganho/perda/ativação de privilégios no período informado."""
     try:
@@ -310,7 +325,7 @@ def list_privilege_timeline_events(days: int = 30, provider: str = "all", action
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def get_identity_privilege_timeline(identity_identifier: str, days: int = 90, limit: int = 200) -> dict:
     """Retorna timeline de privilégios para uma identidade específica (UPN, nome ou objectId)."""
     try:
@@ -331,7 +346,7 @@ def get_identity_privilege_timeline(identity_identifier: str, days: int = 90, li
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def summarize_privilege_timeline(days: int = 30) -> dict:
     """Resumo da timeline de privilégios (ganhos, revogações, ativações e anomalias)."""
     try:
@@ -347,7 +362,7 @@ def summarize_privilege_timeline(days: int = 30) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def export_privilege_timeline_report(days: int = 30, top: int = 10) -> dict:
     """Gera relatório de timeline com top grants/revokes por identidade, role e escopo."""
     try:
@@ -369,7 +384,7 @@ def export_privilege_timeline_report(days: int = 30, top: int = 10) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def timeline_natural_language_query(question: str, limit: int = 20) -> dict:
     """Interpreta perguntas de auditoria temporal de privilégios em linguagem natural."""
     try:
@@ -392,7 +407,7 @@ def timeline_natural_language_query(question: str, limit: int = 20) -> dict:
     }
 
 
-@mcp.tool()
+@read_only_tool()
 def agent_natural_language_query(question: str, limit: int = 20) -> dict:
     """Interpreta perguntas sobre Agent Identities em linguagem natural."""
     try:
@@ -415,7 +430,7 @@ def agent_natural_language_query(question: str, limit: int = 20) -> dict:
     }
 
 
-@mcp.tool()
+@read_only_tool()
 def run_agent_assessment(top_risks: int = 10) -> dict:
     """Executa assessment específico de Agent Identities e retorna ranking de risco."""
     try:
@@ -437,35 +452,35 @@ def run_agent_assessment(top_risks: int = 10) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def list_deny_assignments(limit: int = 50) -> dict:
     """Lista deny assignments do Azure."""
     rows = azure_list_deny_assignments()[: max(1, min(int(limit), 200))]
     return {"count": len(rows), "deny_assignments": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def list_applications_without_owners(limit: int = 50) -> dict:
     """Lista aplicações sem owner definido no Entra ID."""
     rows = entra_list_applications_without_owners()[: max(1, min(int(limit), 200))]
     return {"count": len(rows), "applications": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def list_application_secrets_expiring(days: int = 30, limit: int = 100) -> dict:
     """Lista secrets expirados ou próximos da expiração em aplicações do Entra ID."""
     rows = entra_list_secrets_expiring(days=days)[: max(1, min(int(limit), 500))]
     return {"count": len(rows), "secrets": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def list_graph_critical_application_permissions(limit: int = 100) -> dict:
     """Lista aplicações/service principals com Microsoft Graph Application Permissions críticas."""
     rows = entra_list_graph_critical_permissions()[: max(1, min(int(limit), 500))]
     return {"count": len(rows), "permissions": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def list_pim_role_states(limit: int = 200, include_permanent: bool = True) -> dict:
     """
     Lista atribuições privilegiadas classificadas por estado:
@@ -476,7 +491,7 @@ def list_pim_role_states(limit: int = 200, include_permanent: bool = True) -> di
     return {"count": len(limited), "rows": limited, "coverage": pim_coverage()}
 
 
-@mcp.tool()
+@read_only_tool()
 def get_pim_state_summary() -> dict:
     """Retorna comparativo de estados PIM (Active vs Eligible vs Permanent)."""
     rows = pim_list_role_states(include_permanent=True)
@@ -486,7 +501,7 @@ def get_pim_state_summary() -> dict:
     return summary
 
 
-@mcp.tool()
+@read_only_tool()
 def pim_natural_language_query(question: str, limit: int = 20) -> dict:
     """Interpreta perguntas de PIM em linguagem natural e retorna resposta com resumo e detalhes."""
     result = pim_answer_question(question=question, limit=limit)
@@ -498,7 +513,7 @@ def pim_natural_language_query(question: str, limit: int = 20) -> dict:
     }
 
 
-@mcp.tool()
+@read_only_tool()
 def iam_natural_language_query(question: str, limit: int = 20) -> dict:
     """
     Interpreta uma pergunta de IAM em linguagem natural e responde com correlação Entra + Azure.
@@ -524,7 +539,7 @@ def iam_natural_language_query(question: str, limit: int = 20) -> dict:
     }
 
 
-@mcp.tool()
+@read_only_tool()
 def run_iam_assessment(top_risks: int = 10) -> dict:
     """Executa um IAM Assessment no ambiente e retorna riscos principais e plano de remediação."""
     try:
@@ -551,7 +566,7 @@ def run_iam_assessment(top_risks: int = 10) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def run_enterprise_identity_audit(top_risks: int = 15) -> dict:
     """Executa auditoria IAM enterprise consolidada (Entra + Azure + subscriptions + management groups)."""
     try:
@@ -577,31 +592,31 @@ def run_enterprise_identity_audit(top_risks: int = 15) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def get_management_group_inventory(limit: int = 50) -> dict:
     """Retorna inventário de Management Groups visíveis para auditoria de governança."""
     return iam_get_management_group_inventory(limit=limit)
 
 
-@mcp.tool()
+@read_only_tool()
 def get_subscription_direct_access_summary(limit: int = 20) -> dict:
     """Resumo de role assignments diretos em escopo de subscription (inclui privilegiados)."""
     return iam_get_subscription_direct_access_summary(limit=limit)
 
 
-@mcp.tool()
+@read_only_tool()
 def list_resources(resource_type: str = "", name_contains: str = "", limit: int = 20) -> dict:
     """List Azure resources using controlled read-only filters. Use full Azure resource type when filtering, e.g. microsoft.compute/virtualmachines."""
     return azure_list_resources(resource_type=resource_type, name_contains=name_contains, limit=limit)
 
 
-@mcp.tool()
+@read_only_tool()
 def list_public_ip_resources(limit: int = 20) -> dict:
     """List Public IP resources. This does not prove that a workload is actually internet-exposed."""
     return azure_list_public_ip_resources(limit=limit)
 
 
-@mcp.tool()
+@read_only_tool()
 def identity_360(user_identifier: str) -> dict:
     """
     Identity 360: visão completa de uma identidade — quem é, a que possui acesso
@@ -621,7 +636,7 @@ def identity_360(user_identifier: str) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def get_user_authentication_methods(user_identifier: str) -> dict:
     """Retorna métodos de autenticação e status de MFA/passwordless de um usuário."""
     try:
@@ -634,32 +649,32 @@ def get_user_authentication_methods(user_identifier: str) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def get_authentication_methods_summary() -> dict:
     """Resumo de registro de MFA e capacidade passwordless do tenant."""
     return auth_get_summary()
 
 
-@mcp.tool()
+@read_only_tool()
 def list_users_without_mfa(limit: int = 100) -> dict:
     """Lista usuários sem MFA registrado."""
     rows = auth_list_users_without_mfa()[: max(1, min(int(limit), 500))]
     return {"count": len(rows), "users": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def assess_privileged_mfa() -> dict:
     """Assessment de MFA para usuários privilegiados (sem MFA ou métodos fracos)."""
     return auth_assess_privileged_mfa()
 
 
-@mcp.tool()
+@read_only_tool()
 def get_authentication_strength_summary() -> dict:
     """Resumo enterprise de força de autenticação (forte/misto/fraco) e adoção de passkey/FIDO2."""
     return auth_get_strength_summary()
 
 
-@mcp.tool()
+@read_only_tool()
 def list_users_with_weak_authentication(limit: int = 100, include_mfa_registered: bool = True) -> dict:
     """Lista usuários com métodos fracos registrados (sms/voice/email/password), com evidência técnica."""
     rows = auth_list_users_with_weak_authentication(include_mfa_registered=include_mfa_registered)[
@@ -668,14 +683,14 @@ def list_users_with_weak_authentication(limit: int = 100, include_mfa_registered
     return {"count": len(rows), "users": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def list_users_with_passkey(limit: int = 100) -> dict:
     """Lista usuários com passkey/FIDO2 registrado."""
     rows = auth_list_users_with_passkey()[: max(1, min(int(limit), 500))]
     return {"count": len(rows), "users": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def get_owned_objects(user_identifier: str, limit: int = 100) -> dict:
     """Ownership 360: objetos (Groups, Applications, Service Principals, Agents, Blueprints) sob responsabilidade de um usuário."""
     try:
@@ -690,7 +705,7 @@ def get_owned_objects(user_identifier: str, limit: int = 100) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def list_objects_without_owner(limit: int = 200) -> dict:
     """Lista objetos sem owner (Groups, Applications, Service Principals, Agents, Blueprints)."""
     try:
@@ -700,7 +715,7 @@ def list_objects_without_owner(limit: int = 200) -> dict:
         return {"count": 0, "objects": [], "note": "Não foi possível avaliar ownership.", "error": str(exc)}
 
 
-@mcp.tool()
+@read_only_tool()
 def detect_toxic_combinations(limit: int = 50) -> dict:
     """Detecta toxic combinations / violações de Separation of Duties com evidência."""
     try:
@@ -710,7 +725,7 @@ def detect_toxic_combinations(limit: int = 50) -> dict:
         return {"count": 0, "combinations": [], "note": "Não foi possível avaliar toxic combinations.", "error": str(exc)}
 
 
-@mcp.tool()
+@read_only_tool()
 def compute_identity_blast_radius(identity_identifier: str) -> dict:
     """Estima o blast radius (alcance) de uma identidade (subscriptions, management groups, capacidade de conceder acesso)."""
     try:
@@ -723,14 +738,14 @@ def compute_identity_blast_radius(identity_identifier: str) -> dict:
         }
 
 
-@mcp.tool()
+@read_only_tool()
 def list_top_blast_radius(limit: int = 10) -> dict:
     """Ranking de identidades por maior blast radius."""
     rows = blast_top(limit=limit)
     return {"count": len(rows), "identities": rows}
 
 
-@mcp.tool()
+@read_only_tool()
 def search_official_guidance(topic: str, limit: int = 4) -> dict:
     """Return curated official Microsoft Learn references relevant to an Azure topic or best-practice question."""
     return docs_search_official_guidance(topic=topic, limit=limit)
@@ -744,7 +759,7 @@ def search_official_guidance(topic: str, limit: int = 4) -> dict:
 # ==========================================================================
 
 
-@mcp.tool()
+@read_only_tool()
 def graph_discover_capabilities(
     question: str = "",
     domain: str = "",
@@ -780,7 +795,7 @@ def graph_discover_capabilities(
     return payload
 
 
-@mcp.tool()
+@read_only_tool()
 def graph_answer_identity_question(question: str, limit: int = 50) -> dict:
     """
     Interpreta uma pergunta de identidade em linguagem natural, escolhe a capability
@@ -798,7 +813,7 @@ def graph_answer_identity_question(question: str, limit: int = 50) -> dict:
     return capability_answer_question(question=question, limit=limit)
 
 
-@mcp.tool()
+@read_only_tool()
 def graph_list(capability_id: str, filter: str = "", select: str = "", limit: int = 50) -> dict:
     """
     Lista objetos de uma capability catalogada (operação 'list').
@@ -815,7 +830,7 @@ def graph_list(capability_id: str, filter: str = "", select: str = "", limit: in
     return capability_execute(capability_id, params, operation="list")
 
 
-@mcp.tool()
+@read_only_tool()
 def graph_get(capability_id: str, id: str, select: str = "") -> dict:
     """
     Obtém um objeto específico de uma capability catalogada (operação 'get').
@@ -828,7 +843,7 @@ def graph_get(capability_id: str, id: str, select: str = "") -> dict:
     return capability_execute(capability_id, params, operation="get")
 
 
-@mcp.tool()
+@read_only_tool()
 def graph_query(capability_id: str, query: str = "", scope: str = "", limit: int = 100) -> dict:
     """
     Executa consulta parametrizada em fontes que aceitam query (ex.: Azure Resource Graph).
@@ -844,7 +859,7 @@ def graph_query(capability_id: str, query: str = "", scope: str = "", limit: int
     return capability_execute(capability_id, params, operation="query")
 
 
-@mcp.tool()
+@read_only_tool()
 def graph_relationship(capability_id: str, id: str, limit: int = 100) -> dict:
     """
     Consulta relacionamentos de um objeto de diretório (membros, owners, membership transitiva,
@@ -860,7 +875,7 @@ def graph_relationship(capability_id: str, id: str, limit: int = 100) -> dict:
     return capability_execute(capability_id, {"id": id, "limit": limit}, operation="list")
 
 
-@mcp.tool()
+@read_only_tool()
 def graph_permissions(question: str = "", capability_id: str = "") -> dict:
     """
     Retorna as permissões Microsoft Graph / Azure necessárias para uma consulta,
@@ -871,7 +886,7 @@ def graph_permissions(question: str = "", capability_id: str = "") -> dict:
     return capability_required_permissions(question=question, capability_id=capability_id)
 
 
-@mcp.tool()
+@read_only_tool()
 def graph_role_assignments(
     include_directory_roles: bool = True,
     include_pim: bool = True,
@@ -893,7 +908,7 @@ def graph_role_assignments(
     )
 
 
-@mcp.tool()
+@read_only_tool()
 def graph_directory_objects(question: str = "", domains: str = "", limit: int = 100) -> dict:
     """
     Coleta objetos de diretório de um ou mais domínios e correlaciona a mesma identidade
@@ -906,7 +921,7 @@ def graph_directory_objects(question: str = "", domains: str = "", limit: int = 
     return capability_directory_objects(question=question, domains=domain_list, limit=limit)
 
 
-@mcp.tool()
+@read_only_tool()
 def list_application_provenance(
     provenance: str = "all",
     include_managed_identities: bool = True,
@@ -934,7 +949,7 @@ def list_application_provenance(
     )
 
 
-@mcp.tool()
+@read_only_tool()
 def summarize_application_provenance() -> dict:
     """
     Resumo executivo da procedência das aplicações do tenant: quantas estão sob sua
@@ -944,7 +959,7 @@ def summarize_application_provenance() -> dict:
     return provenance_summarize_application_provenance()
 
 
-@mcp.tool()
+@read_only_tool()
 def graph_assessment(scope: str = "identity", limit: int = 200) -> dict:
     """
     Executa assessment de identidade baseado no capability registry, declarando
