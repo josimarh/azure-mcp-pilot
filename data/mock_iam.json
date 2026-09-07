@@ -1,0 +1,386 @@
+{
+  "users": [
+    {
+      "id": "u-001",
+      "displayName": "Ana Silva",
+      "userPrincipalName": "ana.silva@contoso.com",
+      "mail": "ana.silva@contoso.com",
+      "userType": "Member",
+      "accountEnabled": true
+    },
+    {
+      "id": "u-002",
+      "displayName": "Bruno Lima",
+      "userPrincipalName": "bruno.lima@contoso.com",
+      "mail": "bruno.lima@contoso.com",
+      "userType": "Member",
+      "accountEnabled": false
+    },
+    {
+      "id": "u-003",
+      "displayName": "Carla Souza",
+      "userPrincipalName": "carla.souza@contoso.com",
+      "mail": "carla.souza@contoso.com",
+      "userType": "Guest",
+      "accountEnabled": true
+    }
+  ],
+  "groups": [
+    {"id": "g-001", "displayName": "IAM Admins", "isAssignableToRole": true, "ownerIds": ["u-001"]},
+    {"id": "g-002", "displayName": "Platform Owners", "isAssignableToRole": false, "ownerIds": []}
+  ],
+  "group_memberships": [
+    {"groupId": "g-001", "memberId": "u-001"},
+    {"groupId": "g-001", "memberId": "u-002"},
+    {"groupId": "g-002", "memberId": "u-003"}
+  ],
+  "authentication_methods": [
+    {
+      "userId": "u-001",
+      "isMfaRegistered": true,
+      "isPasswordlessCapable": true,
+      "methods": ["microsoftAuthenticator", "fido2", "windowsHelloForBusiness"]
+    },
+    {
+      "userId": "u-002",
+      "isMfaRegistered": false,
+      "isPasswordlessCapable": false,
+      "methods": ["password"]
+    },
+    {
+      "userId": "u-003",
+      "isMfaRegistered": true,
+      "isPasswordlessCapable": false,
+      "methods": ["microsoftAuthenticator", "sms"]
+    }
+  ],
+  "directory_role_assignments": [
+    {"roleName": "Global Administrator", "principalId": "u-001", "principalType": "User", "assignmentType": "Direct"},
+    {"roleName": "Privileged Role Administrator", "principalId": "u-001", "principalType": "User", "assignmentType": "Direct"},
+    {"roleName": "Global Administrator", "principalId": "u-003", "principalType": "User", "assignmentType": "Direct"}
+  ],
+  "azure_role_assignments": [
+    {
+      "principalId": "u-001",
+      "principalType": "User",
+      "roleName": "Owner",
+      "scope": "/subscriptions/sub-prd",
+      "assignmentType": "Direct",
+      "subscription": "sub-prd",
+      "resourceGroup": null,
+      "resource": null
+    },
+    {
+      "principalId": "u-002",
+      "principalType": "User",
+      "roleName": "User Access Administrator",
+      "scope": "/subscriptions/sub-prd/resourceGroups/rg-sec-prd",
+      "assignmentType": "Direct",
+      "subscription": "sub-prd",
+      "resourceGroup": "rg-sec-prd",
+      "resource": null
+    },
+    {
+      "principalId": "sp-001",
+      "principalType": "ServicePrincipal",
+      "roleName": "Owner",
+      "scope": "/subscriptions/sub-prd",
+      "assignmentType": "Direct",
+      "subscription": "sub-prd",
+      "resourceGroup": null,
+      "resource": null
+    },
+    {
+      "principalId": "mi-001",
+      "principalType": "ServicePrincipal",
+      "roleName": "Contributor",
+      "scope": "/subscriptions/sub-dev/resourceGroups/rg-app-dev",
+      "assignmentType": "Direct",
+      "subscription": "sub-dev",
+      "resourceGroup": "rg-app-dev",
+      "resource": null
+    },
+    {
+      "principalId": "sp-002",
+      "principalType": "ServicePrincipal",
+      "roleName": "User Access Administrator",
+      "scope": "/subscriptions/sub-prd",
+      "assignmentType": "Direct",
+      "subscription": "sub-prd",
+      "resourceGroup": null,
+      "resource": null
+    },
+    {
+      "principalId": "sp-003",
+      "principalType": "ServicePrincipal",
+      "roleName": "Owner",
+      "scope": "/providers/Microsoft.Management/managementGroups/mg-root",
+      "assignmentType": "Direct",
+      "subscription": null,
+      "resourceGroup": null,
+      "resource": null
+    },
+    {
+      "principalId": "g-001",
+      "principalType": "Group",
+      "roleName": "Contributor",
+      "scope": "/subscriptions/sub-dev",
+      "assignmentType": "InheritedFromGroup",
+      "subscription": "sub-dev",
+      "resourceGroup": null,
+      "resource": null
+    },
+    {
+      "principalId": "u-999",
+      "principalType": "User",
+      "roleName": "Owner",
+      "scope": "/subscriptions/sub-prd/resourceGroups/rg-ghost",
+      "assignmentType": "Direct",
+      "subscription": "sub-prd",
+      "resourceGroup": "rg-ghost",
+      "resource": null
+    }
+  ],
+  "applications": [
+    {
+      "id": "app-001",
+      "displayName": "Contoso API",
+      "appId": "00000000-0000-0000-0000-000000000001",
+      "owners": ["u-001"],
+      "secrets": [
+        {"displayName": "prod-secret", "endDateTime": "2025-01-01T00:00:00Z"},
+        {"displayName": "rotation-secret", "endDateTime": "2027-01-20T00:00:00Z"}
+      ],
+      "graphAppPermissions": ["User.Read.All", "Directory.Read.All"]
+    },
+    {
+      "id": "app-002",
+      "displayName": "Legacy Automation",
+      "appId": "00000000-0000-0000-0000-000000000002",
+      "owners": [],
+      "secrets": [
+        {"displayName": "legacy-secret", "endDateTime": "2026-09-20T00:00:00Z"}
+      ],
+      "graphAppPermissions": ["RoleManagement.ReadWrite.Directory"]
+    }
+  ],
+  "service_principals": [
+    {"id": "sp-001", "displayName": "Contoso API SP", "appId": "00000000-0000-0000-0000-000000000001", "servicePrincipalType": "Application"},
+    {"id": "sp-002", "displayName": "Ops Automation SP", "appId": "00000000-0000-0000-0000-000000000003", "servicePrincipalType": "Application"},
+    {"id": "sp-003", "displayName": "Legacy Agent SP", "appId": "00000000-0000-0000-0000-000000000002", "servicePrincipalType": "Application"},
+    {"id": "sp-004", "displayName": "Orphan Agent SP", "appId": "00000000-0000-0000-0000-000000000004", "servicePrincipalType": "Application"},
+    {"id": "mi-001", "displayName": "mi-payments-prod", "appId": null, "servicePrincipalType": "ManagedIdentity"}
+  ],
+  "agents": [
+    {
+      "id": "ag-001",
+      "name": "Finance-Agent",
+      "enabled": true,
+      "createdDateTime": "2026-07-01T12:00:00Z",
+      "identityId": "sp-001",
+      "blueprintId": "bp-001",
+      "ownerIds": ["u-001"]
+    },
+    {
+      "id": "ag-002",
+      "name": "Ops-Agent",
+      "enabled": true,
+      "createdDateTime": "2026-08-10T09:30:00Z",
+      "identityId": "sp-002",
+      "blueprintId": "bp-002",
+      "ownerIds": ["u-002", "u-003"]
+    },
+    {
+      "id": "ag-003",
+      "name": "Legacy-Agent",
+      "enabled": false,
+      "createdDateTime": "2025-11-15T08:00:00Z",
+      "identityId": "sp-003",
+      "blueprintId": "bp-003",
+      "ownerIds": []
+    },
+    {
+      "id": "ag-004",
+      "name": "Orphan-Agent",
+      "enabled": true,
+      "createdDateTime": "2026-09-01T15:45:00Z",
+      "identityId": "sp-004",
+      "blueprintId": "bp-002",
+      "ownerIds": ["u-999"]
+    }
+  ],
+  "agent_blueprints": [
+    {"id": "bp-001", "name": "Finance-Agent-Blueprint", "ownerIds": ["u-001"]},
+    {"id": "bp-002", "name": "Ops-Agent-Blueprint", "ownerIds": ["u-002"]},
+    {"id": "bp-003", "name": "Legacy-Agent-Blueprint", "ownerIds": []}
+  ],
+  "agent_graph_permissions": [
+    {
+      "agentId": "ag-001",
+      "applicationPermissions": ["User.Read.All", "Directory.Read.All"],
+      "delegatedPermissions": [],
+      "adminConsent": true
+    },
+    {
+      "agentId": "ag-002",
+      "applicationPermissions": ["Group.ReadWrite.All", "AppRoleAssignment.ReadWrite.All"],
+      "delegatedPermissions": ["User.Read"],
+      "adminConsent": true
+    },
+    {
+      "agentId": "ag-003",
+      "applicationPermissions": ["RoleManagement.ReadWrite.Directory"],
+      "delegatedPermissions": [],
+      "adminConsent": true
+    },
+    {
+      "agentId": "ag-004",
+      "applicationPermissions": ["Directory.Read.All"],
+      "delegatedPermissions": [],
+      "adminConsent": false
+    }
+  ],
+  "conditional_access_policies": [
+    {"id": "ca-001", "displayName": "Require MFA for admins", "state": "enabled"},
+    {"id": "ca-002", "displayName": "Block legacy auth", "state": "enabled"}
+  ],
+  "management_groups": [
+    {"id": "mg-root", "name": "Tenant Root Group"}
+  ],
+  "custom_roles": [
+    {
+      "id": "cr-001",
+      "roleName": "Custom Super Admin",
+      "isCustom": true,
+      "actions": ["*"],
+      "notActions": []
+    }
+  ],
+  "deny_assignments": [
+    {"id": "deny-001", "scope": "/subscriptions/sub-prd", "displayName": "Protect critical subscription"}
+  ],
+  "pim_assignments": [
+    {
+      "id": "pim-001",
+      "provider": "Entra",
+      "principalId": "u-001",
+      "principalType": "User",
+      "roleName": "Global Administrator",
+      "state": "Eligible",
+      "scope": "/",
+      "assignmentType": "Eligible"
+    },
+    {
+      "id": "pim-002",
+      "provider": "Entra",
+      "principalId": "u-003",
+      "principalType": "User",
+      "roleName": "Global Administrator",
+      "state": "Active",
+      "scope": "/",
+      "assignmentType": "Active"
+    },
+    {
+      "id": "pim-003",
+      "provider": "Entra",
+      "principalId": "u-002",
+      "principalType": "User",
+      "roleName": "Privileged Role Administrator",
+      "state": "Eligible",
+      "scope": "/",
+      "assignmentType": "Eligible"
+    },
+    {
+      "id": "pim-004",
+      "provider": "Azure",
+      "principalId": "u-001",
+      "principalType": "User",
+      "roleName": "Owner",
+      "state": "Eligible",
+      "scope": "/subscriptions/sub-prd",
+      "assignmentType": "Eligible"
+    },
+    {
+      "id": "pim-005",
+      "provider": "Azure",
+      "principalId": "u-003",
+      "principalType": "User",
+      "roleName": "Contributor",
+      "state": "Active",
+      "scope": "/subscriptions/sub-dev/resourceGroups/rg-app-dev",
+      "assignmentType": "Active"
+    },
+    {
+      "id": "pim-006",
+      "provider": "Azure",
+      "principalId": "u-002",
+      "principalType": "User",
+      "roleName": "User Access Administrator",
+      "state": "Active",
+      "scope": "/subscriptions/sub-prd/resourceGroups/rg-sec-prd",
+      "assignmentType": "Active"
+    }
+  ],
+  "privilege_change_events": [
+    {
+      "id": "evt-001",
+      "timestamp": "2026-09-03T10:15:00Z",
+      "provider": "Entra",
+      "action": "Grant",
+      "principalId": "u-003",
+      "principalType": "User",
+      "role": "Global Administrator",
+      "scope": "/",
+      "source": "Directory role assignment",
+      "assignmentType": "Direct"
+    },
+    {
+      "id": "evt-002",
+      "timestamp": "2026-09-03T11:20:00Z",
+      "provider": "Azure",
+      "action": "Grant",
+      "principalId": "sp-002",
+      "principalType": "ServicePrincipal",
+      "role": "User Access Administrator",
+      "scope": "/subscriptions/sub-prd",
+      "source": "Azure RBAC role assignment",
+      "assignmentType": "Direct"
+    },
+    {
+      "id": "evt-003",
+      "timestamp": "2026-09-02T08:00:00Z",
+      "provider": "Azure",
+      "action": "Revoke",
+      "principalId": "u-001",
+      "principalType": "User",
+      "role": "Contributor",
+      "scope": "/subscriptions/sub-dev/resourceGroups/rg-app-dev",
+      "source": "Azure RBAC role assignment",
+      "assignmentType": "Direct"
+    },
+    {
+      "id": "evt-004",
+      "timestamp": "2026-09-01T16:30:00Z",
+      "provider": "Entra",
+      "action": "Activate",
+      "principalId": "u-003",
+      "principalType": "User",
+      "role": "Global Administrator",
+      "scope": "/",
+      "source": "PIM activation",
+      "assignmentType": "Active"
+    },
+    {
+      "id": "evt-005",
+      "timestamp": "2026-09-01T18:10:00Z",
+      "provider": "Azure",
+      "action": "Grant",
+      "principalId": "u-999",
+      "principalType": "User",
+      "role": "Owner",
+      "scope": "/subscriptions/sub-prd/resourceGroups/rg-ghost",
+      "source": "Azure RBAC role assignment",
+      "assignmentType": "Direct"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+[
+  {
+    "id": "/subscriptions/sub-dev/resourceGroups/rg-app-dev/providers/Microsoft.Compute/virtualMachines/vm-api-dev-01",
+    "name": "vm-api-dev-01",
+    "type": "microsoft.compute/virtualmachines",
+    "resourceGroup": "rg-app-dev",
+    "subscriptionId": "sub-dev",
+    "location": "brazilsouth"
+  },
+  {
+    "id": "/subscriptions/sub-prd/resourceGroups/rg-app-prd/providers/Microsoft.Compute/virtualMachines/vm-api-prd-01",
+    "name": "vm-api-prd-01",
+    "type": "microsoft.compute/virtualmachines",
+    "resourceGroup": "rg-app-prd",
+    "subscriptionId": "sub-prd",
+    "location": "brazilsouth"
+  },
+  {
+    "id": "/subscriptions/sub-prd/resourceGroups/rg-data-prd/providers/Microsoft.Storage/storageAccounts/stappprd01",
+    "name": "stappprd01",
+    "type": "microsoft.storage/storageaccounts",
+    "resourceGroup": "rg-data-prd",
+    "subscriptionId": "sub-prd",
+    "location": "brazilsouth"
+  },
+  {
+    "id": "/subscriptions/sub-prd/resourceGroups/rg-sec-prd/providers/Microsoft.KeyVault/vaults/kv-app-prd",
+    "name": "kv-app-prd",
+    "type": "microsoft.keyvault/vaults",
+    "resourceGroup": "rg-sec-prd",
+    "subscriptionId": "sub-prd",
+    "location": "brazilsouth"
+  },
+  {
+    "id": "/subscriptions/sub-dev/resourceGroups/rg-net-dev/providers/Microsoft.Network/publicIPAddresses/pip-api-dev",
+    "name": "pip-api-dev",
+    "type": "microsoft.network/publicipaddresses",
+    "resourceGroup": "rg-net-dev",
+    "subscriptionId": "sub-dev",
+    "location": "brazilsouth",
+    "ipAddress": "203.0.113.10",
+    "allocationMethod": "Static",
+    "ipVersion": "IPv4"
+  },
+  {
+    "id": "/subscriptions/sub-prd/resourceGroups/rg-monitor-prd/providers/Microsoft.Insights/components/appinsights-api-prd",
+    "name": "appinsights-api-prd",
+    "type": "microsoft.insights/components",
+    "resourceGroup": "rg-monitor-prd",
+    "subscriptionId": "sub-prd",
+    "location": "brazilsouth"
+  }
+]
