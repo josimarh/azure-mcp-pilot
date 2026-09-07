@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unicodedata
 from collections import Counter, defaultdict
-from typing import Any
+from typing import Any, Callable
 
 from services.azure_rbac import list_privileged_role_assignments
 from services.entra_roles import list_privileged_directory_role_members
@@ -109,7 +109,7 @@ def _mock_pim_assignments() -> list[dict[str, Any]]:
 
 def _entra_role_name_map() -> dict[str, str]:
     definitions = graph_list(
-        "https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions?$select=id,displayName&$top=999"
+        "https://graph.microsoft.com/v1.0/roleManagement/directory/roleDefinitions?$select=id,displayName"
     )
     return {str(item.get("id")): str(item.get("displayName")) for item in definitions if item.get("id")}
 
@@ -147,23 +147,17 @@ def _entra_pim_schedule_rows(state: str) -> list[dict[str, Any]]:
 
 
 def _azure_role_definition_map() -> dict[str, str]:
-    rows = resource_graph_query(
-        "AuthorizationResources "
-        "| where type =~ 'microsoft.authorization/roledefinitions' "
-        "| project roleDefinitionId=tolower(id), roleName=tostring(properties.roleName)"
-    )
-    return {
-        str(item.get("roleDefinitionId")): str(item.get("roleName"))
-        for item in rows
-        if item.get("roleDefinitionId")
-    }
+    from services.azure_role_definitions import role_definitions_map
+
+    return {guid: str(data.get("roleName") or "") for guid, data in role_definitions_map().items()}
 
 
 def _azure_pim_schedule_rows(state: str) -> list[dict[str, Any]]:
+    from services.azure_role_definitions import resolve_role
+
     type_name = "microsoft.authorization/roleeligibilityscheduleinstances"
     if state == "Active":
         type_name = "microsoft.authorization/roleassignmentscheduleinstances"
-    role_map = _azure_role_definition_map()
     rows = resource_graph_query(
         "AuthorizationResources "
         f"| where type =~ '{type_name}' "
@@ -176,13 +170,17 @@ def _azure_pim_schedule_rows(state: str) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     for item in rows:
         role_id = str(item.get("roleDefinitionId") or "")
+        resolved = resolve_role(role_id)
         output.append(
             {
                 "id": item.get("id"),
                 "provider": "Azure",
                 "principalId": item.get("principalId"),
                 "principalType": item.get("principalType"),
-                "role": role_map.get(role_id, role_id),
+                "role": resolved.get("roleName") or role_id,
+                "roleName": resolved.get("roleName"),
+                "roleDefinitionId": role_id,
+                "roleResolution": resolved.get("resolution"),
                 "scope": item.get("scope"),
                 "state": state,
                 "assignmentType": state,
@@ -192,15 +190,50 @@ def _azure_pim_schedule_rows(state: str) -> list[dict[str, Any]]:
     return output
 
 
-def list_pim_assignments() -> list[dict[str, Any]]:
+def _collect_source(source: str, collector: Callable[[], list[dict[str, Any]]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Coleta uma fonte PIM sem deixar que a falha de uma invalide as demais."""
+    try:
+        rows = collector()
+        return rows, {"source": source, "status": "EVALUATED", "count": len(rows)}
+    except Exception as exc:
+        detail = str(exc)
+        status = "PERMISSION_DENIED" if ("403" in detail or "PermissionScopeNotGranted" in detail) else "ERROR"
+        return [], {"source": source, "status": status, "count": 0, "detail": detail[:300]}
+
+
+def list_pim_assignments_with_coverage() -> dict[str, Any]:
+    """Atribuições PIM com cobertura declarada por fonte.
+
+    Uma fonte inacessível vira `PERMISSION_DENIED`/`ERROR`, nunca zero silencioso.
+    """
     if is_mock_mode():
-        return _mock_pim_assignments()
+        rows = _mock_pim_assignments()
+        return {
+            "rows": rows,
+            "coverage": [{"source": "mock", "status": "EVALUATED", "count": len(rows)}],
+        }
+
     rows: list[dict[str, Any]] = []
-    rows.extend(_entra_pim_schedule_rows("Eligible"))
-    rows.extend(_entra_pim_schedule_rows("Active"))
-    rows.extend(_azure_pim_schedule_rows("Eligible"))
-    rows.extend(_azure_pim_schedule_rows("Active"))
-    return rows
+    coverage: list[dict[str, Any]] = []
+    sources: list[tuple[str, Callable[[], list[dict[str, Any]]]]] = [
+        ("Entra PIM (Eligible)", lambda: _entra_pim_schedule_rows("Eligible")),
+        ("Entra PIM (Active)", lambda: _entra_pim_schedule_rows("Active")),
+        ("Azure PIM (Eligible)", lambda: _azure_pim_schedule_rows("Eligible")),
+        ("Azure PIM (Active)", lambda: _azure_pim_schedule_rows("Active")),
+    ]
+    for source, collector in sources:
+        source_rows, status = _collect_source(source, collector)
+        rows.extend(source_rows)
+        coverage.append(status)
+    return {"rows": rows, "coverage": coverage}
+
+
+def pim_coverage() -> list[dict[str, Any]]:
+    return list_pim_assignments_with_coverage()["coverage"]
+
+
+def list_pim_assignments() -> list[dict[str, Any]]:
+    return list_pim_assignments_with_coverage()["rows"]
 
 
 def list_permanent_privileged_assignments() -> list[dict[str, Any]]:

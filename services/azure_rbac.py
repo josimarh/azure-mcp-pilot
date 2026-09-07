@@ -3,32 +3,32 @@ from __future__ import annotations
 from typing import Any
 
 from services.azure_roles import PRIVILEGED_AZURE_ROLES
+from services.azure_role_definitions import RESOLUTION_UNRESOLVED, resolve_role, role_guid
 from services.iam_common import is_mock_mode, load_mock_iam, resource_graph_query, sanitize_assignment
 from services.role_risk import role_risk_score
 
 
 def _live_role_definitions_map() -> dict[str, str]:
-    rows = resource_graph_query(
-        "AuthorizationResources "
-        "| where type =~ 'microsoft.authorization/roledefinitions' "
-        "| project roleDefinitionId=tolower(id), roleName=tostring(properties.roleName)"
-    )
-    return {
-        str(item.get("roleDefinitionId", "")).lower(): str(item.get("roleName", ""))
-        for item in rows
-        if item.get("roleDefinitionId")
-    }
+    from services.azure_role_definitions import role_definitions_map
+
+    return {guid: str(data.get("roleName") or "") for guid, data in role_definitions_map().items()}
 
 
 def list_role_assignments() -> list[dict[str, Any]]:
     if is_mock_mode():
         rows: list[dict[str, Any]] = []
         for item in load_mock_iam().get("azure_role_assignments", []):
+            role_name = item.get("role") or item.get("roleName")
             rows.append(
                 {
                     "principalId": item.get("principalId"),
                     "principalType": item.get("principalType"),
-                    "role": item.get("role") or item.get("roleName"),
+                    "role": role_name,
+                    "roleName": role_name,
+                    "roleGuid": role_guid(item.get("roleDefinitionId")),
+                    "roleType": item.get("roleType"),
+                    "roleDefinitionId": item.get("roleDefinitionId"),
+                    "roleResolution": "MockData",
                     "scope": item.get("scope"),
                     "assignmentType": item.get("assignmentType", "Direct"),
                     "inherited": item.get("inherited", False),
@@ -40,23 +40,30 @@ def list_role_assignments() -> list[dict[str, Any]]:
             )
         return rows
 
-    roles_map = _live_role_definitions_map()
     rows = resource_graph_query(
         "AuthorizationResources "
         "| where type =~ 'microsoft.authorization/roleassignments' "
         "| extend principalId=tostring(properties.principalId), principalType=tostring(properties.principalType), "
         "roleDefinitionId=tolower(tostring(properties.roleDefinitionId)), scope=tostring(properties.scope) "
-        "| project principalId, principalType, roleDefinitionId, scope"
+        "| project id, principalId, principalType, roleDefinitionId, scope"
     )
     output: list[dict[str, Any]] = []
     for item in rows:
         scope = str(item.get("scope") or "")
+        role_definition_id = item.get("roleDefinitionId")
+        resolved = resolve_role(role_definition_id)
+        role_name = resolved.get("roleName")
         output.append(
             {
+                "assignmentId": item.get("id"),
                 "principalId": item.get("principalId"),
                 "principalType": item.get("principalType"),
-                "role": roles_map.get(str(item.get("roleDefinitionId", "")).lower())
-                or item.get("roleDefinitionId"),
+                "role": role_name or role_definition_id,
+                "roleName": role_name,
+                "roleGuid": resolved.get("roleGuid"),
+                "roleType": resolved.get("roleType"),
+                "roleDefinitionId": role_definition_id,
+                "roleResolution": resolved.get("resolution"),
                 "scope": scope,
                 "assignmentType": "Direct",
                 "inherited": False,
@@ -80,7 +87,7 @@ def _extract_scope_name(scope: str, segment: str) -> str | None:
 def list_privileged_role_assignments() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in list_role_assignments():
-        role = item.get("role")
+        role = item.get("roleName") or item.get("role")
         if role not in PRIVILEGED_AZURE_ROLES:
             continue
         risk = role_risk_score(str(role), "Azure", scope=item.get("scope"))
@@ -90,6 +97,19 @@ def list_privileged_role_assignments() -> list[dict[str, Any]]:
         row["riskSource"] = risk["source"]
         rows.append(row)
     return rows
+
+
+def unresolved_role_assignments() -> list[dict[str, Any]]:
+    """Assignments cujo nome de role não pôde ser resolvido.
+
+    Existe para evitar falso zero: sem resolução não é possível afirmar que a
+    role não é privilegiada.
+    """
+    return [
+        item
+        for item in list_role_assignments()
+        if item.get("roleResolution") == RESOLUTION_UNRESOLVED or not item.get("roleName")
+    ]
 
 
 def list_deny_assignments() -> list[dict[str, Any]]:

@@ -39,6 +39,7 @@ from services.entra_pim import (
     answer_pim_question as pim_answer_question,
     get_pim_state_summary as pim_get_state_summary,
     list_pim_role_states as pim_list_role_states,
+    pim_coverage,
 )
 from services.entra_users import list_users as entra_list_users
 from services.effective_access import (
@@ -472,14 +473,17 @@ def list_pim_role_states(limit: int = 200, include_permanent: bool = True) -> di
     """
     rows = pim_list_role_states(include_permanent=include_permanent)
     limited = rows[: max(1, min(int(limit), 500))]
-    return {"count": len(limited), "rows": limited}
+    return {"count": len(limited), "rows": limited, "coverage": pim_coverage()}
 
 
 @mcp.tool()
 def get_pim_state_summary() -> dict:
     """Retorna comparativo de estados PIM (Active vs Eligible vs Permanent)."""
     rows = pim_list_role_states(include_permanent=True)
-    return pim_get_state_summary(rows)
+    summary = pim_get_state_summary(rows)
+    if isinstance(summary, dict):
+        summary["coverage"] = pim_coverage()
+    return summary
 
 
 @mcp.tool()

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from services.azure_rbac import list_role_assignments
+from services.azure_role_definitions import KNOWN_AZURE_ROLE_GUIDS
 from services.entra_apps import list_service_principals_with_graph_critical_permissions
 from services.entra_users import list_users
 from services.entra_workload_identities import list_managed_identities, list_service_principals
@@ -34,14 +35,6 @@ DEFAULT_MAX_LIVE_CANDIDATES = 120
 DEFAULT_MAX_LIVE_OWNER_LOOKUPS = 0
 DEFAULT_MAX_LIVE_RBAC_ASSIGNMENTS = 1200
 DEFAULT_AGENT_TOP_RESULTS = 10
-KNOWN_AZURE_ROLE_GUIDS = {
-    "8e3af657-a8ff-443c-a75c-2fe8c4bcb635": "Owner",
-    "b24988ac-6180-42a0-ab88-20f7382dd24c": "Contributor",
-    "acdd72a7-3385-48ef-bd42-f606fba81ae7": "Reader",
-    "18d7d88d-d35e-4fb5-a5c3-7773c20a72d9": "User Access Administrator",
-    "ba92f5b4-2d11-453d-a403-e96b0029c9fe": "Storage Blob Data Contributor",
-    "4633458b-17de-408a-b874-0445c86b69e6": "Key Vault Secrets Officer",
-}
 NON_EVALUATED_STATUSES = {"NOT_EVALUATED", "INSUFFICIENT_PERMISSIONS", "UNSUPPORTED"}
 
 
@@ -110,41 +103,48 @@ def _live_role_definitions_map() -> dict[str, dict[str, Any]]:
         "| extend roleType=tostring(properties.roleType), permissions=todynamic(properties.permissions) "
         "| project roleDefinitionId=tolower(id), roleName=tostring(properties.roleName), roleType, permissions"
     )
-    return {
-        str(item.get("roleDefinitionId", "")).lower(): {
+    mapping: dict[str, dict[str, Any]] = {}
+    for item in rows:
+        guid = _role_guid_from_id(item.get("roleDefinitionId"))
+        if not guid:
+            continue
+        mapping[guid] = {
             "roleName": str(item.get("roleName") or ""),
             "roleType": str(item.get("roleType") or ""),
             "permissions": item.get("permissions") or [],
         }
-        for item in rows
-        if item.get("roleDefinitionId")
-    }
+    return mapping
 
 
 def _role_guid_from_id(role_definition_id: str | None) -> str | None:
     if not role_definition_id:
         return None
-    rid = str(role_definition_id).strip().lower()
-    if "/" not in rid:
-        return rid
-    marker = "/roledefinitions/"
-    if marker in rid:
-        return rid.split(marker, 1)[1].strip().lower()
-    return None
+    rid = str(role_definition_id).strip().lower().rstrip("/")
+    if not rid:
+        return None
+    return rid.rsplit("/", 1)[-1] or None
 
 
 def _resolve_role_name(
     role_definition_id: str | None, roles_map: dict[str, dict[str, Any]]
 ) -> tuple[str, str, list[dict[str, Any]]]:
+    from services.azure_role_definitions import resolve_role
+
     rid = str(role_definition_id or "")
-    key = rid.lower()
-    if key in roles_map and roles_map[key]:
-        metadata = roles_map[key]
+    guid = _role_guid_from_id(rid)
+    if guid and roles_map.get(guid):
+        metadata = roles_map[guid]
         role_name = str(metadata.get("roleName") or rid)
         role_type = str(metadata.get("roleType") or "")
         mapped_type = "Custom" if role_type.lower() == "customrole" else "Built-in"
         return role_name, mapped_type, list(metadata.get("permissions") or [])
-    guid = _role_guid_from_id(rid)
+
+    resolved = resolve_role(rid)
+    if resolved.get("roleName"):
+        role_type = str(resolved.get("roleType") or "")
+        mapped_type = "Custom" if role_type.lower() == "customrole" else "Built-in"
+        return str(resolved["roleName"]), mapped_type, []
+
     if guid and guid in KNOWN_AZURE_ROLE_GUIDS:
         return KNOWN_AZURE_ROLE_GUIDS[guid], "Built-in", []
     return rid or "N/A", "Unknown", []

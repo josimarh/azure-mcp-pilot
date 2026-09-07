@@ -933,7 +933,7 @@ def _fallback_answer_from_tool(tool_name: str, payload: Any) -> str:
                 "- "
                 f"{item.get('displayName') or item.get('name') or item.get('principalId') or 'N/A'} | "
                 f"Tipo: {item.get('identityType') or item.get('principalType') or 'N/A'} | "
-                f"Role: {item.get('role') or 'N/A'} | "
+                f"Role: {item.get('roleName') or item.get('role') or 'N/A'} | "
                 f"Escopo: {item.get('scope') or 'N/A'}"
             )
         return "\n".join(lines)

@@ -118,6 +118,8 @@ def _list_graph_users() -> list[dict[str, Any]]:
 
 
 def _list_user_role_assignments() -> list[dict[str, Any]]:
+    from services.azure_role_definitions import resolve_role
+
     assignments = _query_resource_graph(
         "AuthorizationResources "
         "| where type =~ 'microsoft.authorization/roleassignments' "
@@ -128,24 +130,16 @@ def _list_user_role_assignments() -> list[dict[str, Any]]:
         "| where principalType =~ 'User' "
         "| project principalId, roleDefinitionId, scope"
     )
-    role_defs = _query_resource_graph(
-        "AuthorizationResources "
-        "| where type =~ 'microsoft.authorization/roledefinitions' "
-        "| project roleDefinitionId=tolower(id), roleName=tostring(properties.roleName)"
-    )
-    role_map = {
-        str(item.get("roleDefinitionId", "")).lower(): item.get("roleName")
-        for item in role_defs
-        if item.get("roleDefinitionId")
-    }
     enriched: list[dict[str, Any]] = []
     for item in assignments:
         role_id = str(item.get("roleDefinitionId", ""))
+        resolved = resolve_role(role_id)
         row = {
             "principalId": item.get("principalId"),
             "roleDefinitionId": role_id,
             "scope": item.get("scope"),
-            "roleName": role_map.get(role_id.lower()),
+            "roleName": resolved.get("roleName"),
+            "roleResolution": resolved.get("resolution"),
         }
         enriched.append(row)
     return enriched
