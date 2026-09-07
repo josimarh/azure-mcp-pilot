@@ -2,7 +2,7 @@
   "name": "idengraph",
   "displayName": "IdenGraph",
   "description": "Identity & Access intelligence powered by Microsoft Graph and MCP. Auditoria read-only de Microsoft Entra ID e Azure RBAC no Copilot Chat.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "josimarh",
   "license": "MIT",
   "icon": "icon.png",

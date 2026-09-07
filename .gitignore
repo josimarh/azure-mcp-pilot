@@ -18,3 +18,5 @@ extension/node_modules/
 extension/out/
 extension/*.vsix
 extension/LICENSE
+extension/vsce_token.txt
+extension/publish_marketplace.ps1

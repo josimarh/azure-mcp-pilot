@@ -5,4 +5,12 @@ out/**/*.map
 .gitignore
 .vscodeignore
 tsconfig.json
+package-lock.json
 *.vsix
+
+# Nunca empacotar segredos ou scripts locais de publicacao.
+# O vsce reempacota no momento do publish, entao um arquivo de token
+# presente no diretorio seria incluido no artefato publicado.
+*.ps1
+*token*
+*.env
