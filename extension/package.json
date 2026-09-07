@@ -1,8 +1,8 @@
 {
   "name": "idengraph",
   "displayName": "IdenGraph",
-  "description": "Identity & Access intelligence powered by Microsoft Graph and MCP. Auditoria read-only de Microsoft Entra ID e Azure RBAC no Copilot Chat.",
-  "version": "0.1.1",
+  "description": "Identity & Access intelligence powered by Microsoft Graph and MCP. Read-only auditing for Microsoft Entra ID and Azure RBAC in Copilot Chat.",
+  "version": "0.1.2",
   "publisher": "josimarh",
   "license": "MIT",
   "icon": "icon.png",
@@ -52,17 +52,17 @@
         "idengraph.useMockData": {
           "type": "boolean",
           "default": false,
-          "description": "Usa dados fictícios em vez de consultar o tenant real. Útil para demonstração."
+          "description": "Query fictional data instead of your real tenant. Useful for demos."
         },
         "idengraph.sanitizeOutput": {
           "type": "boolean",
           "default": true,
-          "description": "Mascara nomes de recursos, resource groups, IDs de subscription e IPs antes que o conteúdo chegue ao modelo."
+          "description": "Mask resource names, resource groups, subscription IDs and IP addresses before content reaches the model."
         },
         "idengraph.subscriptions": {
           "type": "string",
           "default": "",
-          "description": "Limita as consultas a subscriptions específicas (IDs separados por vírgula). Vazio consulta todas as subscriptions acessíveis."
+          "description": "Restrict queries to specific subscriptions (comma-separated IDs). Empty queries all accessible subscriptions."
         }
       }
     }
