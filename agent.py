@@ -982,7 +982,240 @@ async def _openrouter_call(
     raise RuntimeError("Falha ao chamar os modelos OpenRouter: " + " | ".join(errors))
 
 
+# ==========================================================================
+# Modo determinístico (sem LLM)
+#
+# Permite operar sem custo de LLM: a interpretação usa o roteamento por
+# palavra-chave já existente e a nova camada de capacidades. Nenhuma chamada
+# ao OpenRouter é feita neste modo.
+# ==========================================================================
+
+DETERMINISTIC_MODEL_LABEL = "deterministico (sem LLM)"
+
+
+def _llm_enabled() -> bool:
+    """Decide se o LLM (OpenRouter) deve ser usado.
+
+    AGENT_MODE:
+      - "deterministic"/"no-llm"/"offline" -> nunca usa LLM
+      - "llm" -> sempre tenta LLM
+      - "auto" (padrão) -> usa LLM só se houver OPENROUTER_API_KEY
+    """
+    mode = os.getenv("AGENT_MODE", "auto").strip().lower()
+    if mode in {"deterministic", "no-llm", "no_llm", "sem-llm", "offline"}:
+        return False
+    if mode == "llm":
+        return True
+    return bool(os.getenv("OPENROUTER_API_KEY", "").strip())
+
+
+def _format_capability_answer(result: dict[str, Any]) -> str:
+    """Converte a saída estruturada da capability layer em texto executivo."""
+    lines: list[str] = []
+    question = str(result.get("question") or "").strip()
+    if question:
+        lines.append(f"Consulta interpretada: {question}")
+
+    sources = result.get("sources_used") or []
+    if sources:
+        source_names = {
+            "microsoft_graph": "Microsoft Graph (identidade/diretório)",
+            "azure_resource_graph": "Azure Resource Graph",
+            "azure_management": "Azure Management",
+            "azure_authorization": "Azure Authorization (PIM de recurso)",
+        }
+        pretty = ", ".join(source_names.get(s, s) for s in sources)
+        lines.append(f"Fontes consultadas: {pretty}")
+    lines.append("")
+
+    for res in result.get("results", []) or []:
+        if not res.get("ok"):
+            continue
+        domain = str(res.get("domain") or "").replace("_", " ").title()
+        count = res.get("count")
+
+        totals = res.get("totals")
+        if res.get("capability_id") == "graph.applications.provenance" and isinstance(totals, dict):
+            lines.append("PROCEDÊNCIA DE APLICAÇÕES")
+            lines.append(f"- Total de service principals: {totals.get('service_principals')}")
+            lines.append(f"- Criadas no seu tenant (app registrations): {totals.get('tenant_owned')}")
+            lines.append(f"- Nativas da Microsoft (first-party): {totals.get('microsoft_first_party')}")
+            lines.append(f"- De terceiros consentidas: {totals.get('third_party_multi_tenant')}")
+            lines.append(f"- Managed Identities: {totals.get('managed_identities')}")
+            lines.append("")
+            continue
+
+        header = f"{domain}: {count} resultado(s)" if count is not None else domain
+        lines.append(header)
+
+        summary = res.get("summary") or {}
+        by_type = summary.get("by_principal_type") or {}
+        if by_type:
+            parts = [f"{v} {k}" for k, v in by_type.items()]
+            lines.append("- Por tipo: " + " | ".join(parts))
+        if summary.get("accounts_disabled"):
+            lines.append(f"- Contas desabilitadas: {summary.get('accounts_disabled')}")
+
+        for item in (res.get("items") or [])[:10]:
+            name = item.get("displayName") or item.get("id") or "(sem nome)"
+            ptype = item.get("principalType") or ""
+            lines.append(f"  • {name}" + (f" [{ptype}]" if ptype else ""))
+        if res.get("truncated"):
+            lines.append("  • ... (resultado truncado; refine a consulta para ver mais)")
+        lines.append("")
+
+    failures = result.get("failures") or []
+    if failures:
+        lines.append("COBERTURA PARCIAL")
+        for fail in failures:
+            kind = fail.get("error_kind")
+            if kind == "permission_denied":
+                lines.append(f"- {fail.get('capability_id')}: a identidade atual não tem permissão suficiente.")
+            elif kind == "not_integrated":
+                lines.append(f"- {fail.get('capability_id')}: capacidade ainda não integrada.")
+            else:
+                lines.append(f"- {fail.get('capability_id')}: {fail.get('error')}")
+        lines.append("")
+
+    for note in result.get("notes", []) or []:
+        lines.append(f"Nota: {note}")
+
+    targets = result.get("requires_target_input") or []
+    if targets:
+        names = ", ".join(t.get("resource", "") for t in targets)
+        lines.append(
+            f"Consultas adicionais disponíveis mediante alvo específico: {names}."
+        )
+
+    return "\n".join(lines).strip()
+
+
+def _format_capability_error(result: dict[str, Any]) -> str:
+    """Mensagem honesta quando não há capability ou operação é bloqueada."""
+    kind = result.get("error_kind")
+    base = result.get("error") or "Não foi possível responder a consulta."
+    if kind == "write_blocked":
+        return (
+            f"{base}\n\n"
+            "Este assistente opera em modo somente-leitura. "
+            "Operações permitidas: consultar, listar, avaliar e correlacionar."
+        )
+    if kind == "no_capability":
+        gaps = result.get("recognized_gap_domains") or []
+        extra = ""
+        if gaps:
+            extra = "\nDomínio(s) reconhecido(s), porém ainda não integrado(s): " + ", ".join(gaps)
+        return f"{base}{extra}"
+    return base
+
+
+def _deterministic_suggestions() -> str:
+    return (
+        "Não consegui identificar com confiança a qual consulta essa pergunta se refere.\n\n"
+        "Tente algo como:\n"
+        "- Quais usuários possuem Global Administrator?\n"
+        "- Quais aplicações foram criadas no tenant?\n"
+        "- Quem possui Owner no Azure?\n"
+        "- Liste os convidados do tenant\n"
+        "- Faça um assessment de identidade"
+    )
+
+
+async def _ask_deterministic(
+    question: str, history: list[dict[str, str]] | None = None
+) -> dict[str, Any]:
+    """Responde sem LLM: roteamento por palavra-chave + capability layer."""
+    tool_trace: list[dict[str, Any]] = []
+
+    # 0. Guard de segurança: bloqueia intenção de escrita ANTES de qualquer roteamento.
+    #    Sem isso, o roteador por palavra-chave converteria "remova a role X" em uma
+    #    consulta de leitura, mascarando a intenção de escrita.
+    from services.capability_router import route_question
+
+    guard = route_question(question)
+    if guard.blocked:
+        return {
+            "answer": _format_capability_error(
+                {"error_kind": "write_blocked", "error": guard.blocked_reason}
+            ),
+            "model": DETERMINISTIC_MODEL_LABEL,
+            "tool_trace": [{"tool": "write_guard", "is_error": True, "blocked": True}],
+        }
+
+    # 1. Roteador existente (tools ricas: agents, timeline, IAM, PIM, subscriptions)
+    fallback = _fallback_tool_for_question(question)
+    if fallback:
+        tool_name, tool_args = fallback
+        try:
+            async with Client(mcp) as mcp_client:
+                result = await asyncio.wait_for(
+                    mcp_client.call_tool(tool_name, tool_args), timeout=90
+                )
+            payload = _parse_tool_result(result)
+            tool_trace.append(
+                {
+                    "tool": tool_name,
+                    "arguments": tool_args,
+                    "is_error": result.is_error,
+                    "deterministic": True,
+                }
+            )
+            if not result.is_error:
+                return {
+                    "answer": _fallback_answer_from_tool(tool_name, payload),
+                    "model": DETERMINISTIC_MODEL_LABEL,
+                    "tool_trace": tool_trace,
+                }
+        except Exception as exc:
+            tool_trace.append(
+                {
+                    "tool": tool_name,
+                    "arguments": tool_args,
+                    "is_error": True,
+                    "deterministic": True,
+                    "error": str(exc),
+                }
+            )
+
+    # 2. Nova camada de capacidades (Graph genérico, procedência, RBAC separado)
+    from services.capability_service import capability_answer_question
+
+    cap = capability_answer_question(question, limit=50)
+    if cap.get("ok"):
+        for res in cap.get("results", []) or []:
+            tool_trace.append(
+                {
+                    "tool": res.get("capability_id"),
+                    "is_error": not res.get("ok"),
+                    "deterministic": True,
+                    "source": res.get("source"),
+                }
+            )
+        return {
+            "answer": _format_capability_answer(cap),
+            "model": DETERMINISTIC_MODEL_LABEL,
+            "tool_trace": tool_trace,
+        }
+
+    if cap.get("error"):
+        return {
+            "answer": _format_capability_error(cap),
+            "model": DETERMINISTIC_MODEL_LABEL,
+            "tool_trace": tool_trace,
+        }
+
+    # 3. Nada casou com confiança
+    return {
+        "answer": _deterministic_suggestions(),
+        "model": DETERMINISTIC_MODEL_LABEL,
+        "tool_trace": tool_trace,
+    }
+
+
 async def ask(question: str, history: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    if not _llm_enabled():
+        return await _ask_deterministic(question, history)
+
     history = history or []
     messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     for item in history[-8:]:
