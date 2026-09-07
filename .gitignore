@@ -12,3 +12,9 @@ build/
 publish_pypi.ps1
 publish_pypi_v2.ps1
 pypi_token.txt
+
+# Extensao VS Code
+extension/node_modules/
+extension/out/
+extension/*.vsix
+extension/LICENSE
