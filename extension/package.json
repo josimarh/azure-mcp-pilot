@@ -31,12 +31,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/josimarh/azure-mcp-pilot.git"
+    "url": "https://github.com/josimarh/idengraph.git"
   },
   "bugs": {
-    "url": "https://github.com/josimarh/azure-mcp-pilot/issues"
+    "url": "https://github.com/josimarh/idengraph/issues"
   },
-  "homepage": "https://github.com/josimarh/azure-mcp-pilot#readme",
+  "homepage": "https://github.com/josimarh/idengraph#readme",
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {

@@ -6,7 +6,7 @@ const run = promisify(execFile);
 
 const PROVIDER_ID = 'idengraph.provider';
 const SERVER_LABEL = 'IdenGraph';
-const PACKAGE_NAME = 'azure-mcp-pilot';
+const PACKAGE_NAME = 'idengraph';
 
 /**
  * O servidor MCP é um pacote Python executado via `uvx`. A extensão não o

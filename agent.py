@@ -134,7 +134,7 @@ def _headers() -> dict[str, str]:
     headers = {
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
-        "X-OpenRouter-Title": os.getenv("OPENROUTER_APP_TITLE", "Azure Environment Copilot Pilot"),
+        "X-OpenRouter-Title": os.getenv("OPENROUTER_APP_TITLE", "IdenGraph"),
     }
     referer = os.getenv("OPENROUTER_HTTP_REFERER", "").strip()
     if referer:

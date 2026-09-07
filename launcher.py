@@ -1,6 +1,6 @@
 """Launcher para o portal Streamlit quando instalado como pacote.
 
-Permite ``azure-mcp-pilot-ui`` iniciar o portal via ``streamlit run`` apontando
+Permite ``idengraph-ui`` iniciar o portal via ``streamlit run`` apontando
 para o app.py empacotado, resolvendo o caminho de forma robusta mesmo quando
 instalado em site-packages.
 """
@@ -23,9 +23,9 @@ def run_ui() -> None:
     except ImportError:
         sys.stderr.write(
             "Streamlit não está instalado. Instale o extra de UI:\n"
-            "  uvx 'azure-mcp-pilot[ui]' ui\n"
+            "  uvx 'idengraph[ui]' ui\n"
             "ou:\n"
-            "  pip install 'azure-mcp-pilot[ui]'\n"
+            "  pip install 'idengraph[ui]'\n"
         )
         raise SystemExit(1)
 

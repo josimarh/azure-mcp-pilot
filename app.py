@@ -288,9 +288,9 @@ def _render_assessment_tabs() -> None:
             st.json(trace)
 
 
-st.set_page_config(page_title="Microsoft Identity Security Copilot", page_icon=":material/security:", layout="wide")
+st.set_page_config(page_title="IdenGraph", page_icon=":material/security:", layout="wide")
 
-st.title("Microsoft Identity Security Copilot", anchor=False)
+st.title("IdenGraph", anchor=False)
 st.caption("Microsoft Entra ID + Azure RBAC + Workload & Agent Identity")
 st.caption(":material/shield_lock: Security/Data Privacy: revise a política de dados antes de enviar contexto para modelos externos.")
 if is_mock_mode():
@@ -460,14 +460,14 @@ if question:
                     st.json(result.get("tool_trace", []))
             except TimeoutError:
                 answer = (
-                    "A consulta excedeu o tempo limite do piloto (90s). "
+                    "A consulta excedeu o tempo limite (90s). "
                     "Isso pode ocorrer quando o tenant tem muitas identidades/permissões. "
                     "Tente uma pergunta mais específica."
                 )
                 st.session_state.assessment_status = "Timeout"
                 st.warning(answer)
             except Exception as exc:
-                answer = f"Erro no piloto: `{exc}`"
+                answer = f"Erro: `{exc}`"
                 st.session_state.assessment_status = "Error"
                 st.error(answer)
             finally:

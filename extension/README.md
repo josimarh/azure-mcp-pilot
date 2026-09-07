@@ -75,4 +75,4 @@ Os dados consultados são do **seu** tenant e trafegam entre a sua máquina, as 
 
 ## Licença
 
-MIT. Código-fonte em [github.com/josimarh/azure-mcp-pilot](https://github.com/josimarh/azure-mcp-pilot).
+MIT. Código-fonte em [github.com/josimarh/idengraph](https://github.com/josimarh/idengraph).

@@ -56,6 +56,6 @@ def search_official_guidance(topic: str, limit: int = 4) -> dict[str, Any]:
         results = DOCS[:2]
     return {
         "topic": topic,
-        "note": "Pilot catalog of official Microsoft references. It is not a full Microsoft Learn RAG index yet.",
+        "note": "Curated catalog of official Microsoft references. It is not a full Microsoft Learn RAG index yet.",
         "sources": results,
     }

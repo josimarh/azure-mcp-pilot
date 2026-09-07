@@ -5,7 +5,7 @@
 A read-only MCP server that turns natural-language questions into audited answers about **Microsoft Entra ID** and **Azure RBAC** — answered by your own Copilot, inside VS Code.
 
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/josimarh.idengraph?label=VS%20Code%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=josimarh.idengraph)
-[![PyPI](https://img.shields.io/pypi/v/azure-mcp-pilot?label=PyPI)](https://pypi.org/project/azure-mcp-pilot/)
+[![PyPI](https://img.shields.io/pypi/v/idengraph?label=PyPI)](https://pypi.org/project/idengraph/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > **It never writes.** Every create, update, delete, grant, or privilege-activation operation is blocked before routing.
@@ -82,7 +82,7 @@ Two details worth highlighting:
 | Layer | Artifact | Role |
 |---|---|---|
 | Discovery | [VS Code extension](https://marketplace.visualstudio.com/items?itemName=josimarh.idengraph) | One-click install, prerequisite checks, settings UI |
-| Engine | [`azure-mcp-pilot` on PyPI](https://pypi.org/project/azure-mcp-pilot/) | The MCP server itself |
+| Engine | [`idengraph` on PyPI](https://pypi.org/project/idengraph/) | The MCP server itself |
 | Model | Your Copilot subscription | No LLM cost to this project or to you |
 
 The extension does not replace the Python package — it registers it. The engine runs the same way whether launched by the extension or configured by hand.
@@ -109,7 +109,7 @@ Create `.vscode/mcp.json`:
     "idengraph": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["azure-mcp-pilot"],
+      "args": ["idengraph"],
       "env": { "MOCK_MODE": "false" }
     }
   }

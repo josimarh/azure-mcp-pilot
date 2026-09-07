@@ -3,14 +3,14 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "azure-mcp-pilot"
+name = "idengraph"
 version = "0.1.0"
-description = "MCP server read-only para auditoria de identidade Microsoft Entra + Azure RBAC (Graph capability discovery)."
+description = "Identity & Access intelligence powered by Microsoft Graph and MCP. Read-only auditing for Microsoft Entra ID and Azure RBAC."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "josimarh", email = "josimar.hedler@outlook.com" }]
-keywords = ["mcp", "azure", "entra", "identity", "security", "rbac", "audit"]
+keywords = ["mcp", "azure", "entra", "identity", "security", "rbac", "audit", "iam"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: System Administrators",
@@ -25,12 +25,12 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/josimarh/azure-mcp-pilot"
-Repository = "https://github.com/josimarh/azure-mcp-pilot"
-Issues = "https://github.com/josimarh/azure-mcp-pilot/issues"
+Homepage = "https://github.com/josimarh/idengraph"
+Repository = "https://github.com/josimarh/idengraph"
+Issues = "https://github.com/josimarh/idengraph/issues"
 
 [project.scripts]
-azure-mcp-pilot = "mcp_server:main"
+idengraph = "mcp_server:main"
 
 [tool.setuptools]
 py-modules = ["mcp_server"]

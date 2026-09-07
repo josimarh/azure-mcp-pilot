@@ -105,10 +105,11 @@ from services.identity_access import (
 )
 
 mcp = MCPServer(
-    "azure-environment-pilot",
+    "idengraph",
     instructions=(
-        "Read-only pilot for Azure environment inventory and Microsoft official guidance. "
-        "Never claim a configuration exists unless a tool result proves it."
+        "IdenGraph: read-only identity and access intelligence for Microsoft Entra ID "
+        "and Azure RBAC. Never claim a configuration exists unless a tool result proves it. "
+        "A missing permission is reported as NOT_EVALUATED, never as zero."
     ),
 )
 
