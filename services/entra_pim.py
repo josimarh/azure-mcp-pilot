@@ -214,9 +214,18 @@ def list_pim_assignments_with_coverage() -> dict[str, Any]:
     """
     if is_mock_mode():
         rows = _mock_pim_assignments()
+        coverage = [{"source": "mock", "status": "EVALUATED", "count": len(rows)}]
         return {
             "rows": rows,
-            "coverage": [{"source": "mock", "status": "EVALUATED", "count": len(rows)}],
+            "coverage": coverage,
+            "licensing": {
+                "verdict": "LICENSE_UNKNOWN",
+                "summary": "Modo mock: licenciamento do tenant não é avaliado.",
+                "licenseStatus": "UNKNOWN",
+                "matchedPlan": None,
+                "evaluatedSources": len(coverage),
+                "totalSources": len(coverage),
+            },
         }
 
     rows: list[dict[str, Any]] = []
@@ -247,7 +256,63 @@ def list_pim_assignments_with_coverage() -> dict[str, Any]:
         rows.extend(azure_rows)
         coverage.append(azure_coverage)
 
-    return {"rows": rows, "coverage": coverage}
+    return {
+        "rows": rows,
+        "coverage": coverage,
+        "licensing": _pim_licensing_context(coverage),
+    }
+
+
+def _pim_licensing_context(coverage: list[dict[str, Any]]) -> dict[str, Any]:
+    """Interpreta o resultado do PIM à luz da licença do tenant.
+
+    Sem esse contexto, "zero PIM" é ambíguo: pode significar que o recurso não
+    está disponível ou que está disponível e ocioso — e as duas situações
+    exigem ações opostas.
+    """
+    from services.entra_licenses import LICENSED, NOT_LICENSED, evaluate_requirement
+
+    licensing = evaluate_requirement("Microsoft Entra ID P2")
+    evaluated = [item for item in coverage if item.get("status") == "EVALUATED"]
+    found = sum(int(item.get("count") or 0) for item in coverage)
+
+    if licensing["status"] == NOT_LICENSED:
+        verdict = "NOT_LICENSED"
+        summary = (
+            "PIM não está disponível neste tenant: requer Microsoft Entra ID P2. "
+            "A ausência de atribuições PIM é esperada."
+        )
+    elif licensing["status"] != LICENSED:
+        verdict = "LICENSE_UNKNOWN"
+        summary = "Não foi possível verificar a licença de PIM neste tenant."
+    elif not evaluated:
+        verdict = "LICENSED_NOT_EVALUATED"
+        summary = (
+            "O tenant possui licença para PIM, mas nenhuma fonte pôde ser avaliada. "
+            "Não é possível afirmar se há ou não atribuições PIM."
+        )
+    elif found == 0:
+        verdict = "LICENSED_NOT_CONFIGURED"
+        summary = (
+            "O tenant possui licença para PIM, as fontes avaliadas responderam e "
+            "nenhuma atribuição PIM foi encontrada. Recurso licenciado e não utilizado."
+        )
+    else:
+        verdict = "IN_USE"
+        summary = "PIM está licenciado e em uso."
+
+    return {
+        "verdict": verdict,
+        "summary": summary,
+        "licenseStatus": licensing["status"],
+        "matchedPlan": licensing.get("matchedPlan"),
+        "evaluatedSources": len(evaluated),
+        "totalSources": len(coverage),
+    }
+
+
+def pim_licensing() -> dict[str, Any]:
+    return list_pim_assignments_with_coverage()["licensing"]
 
 
 def pim_coverage() -> list[dict[str, Any]]:

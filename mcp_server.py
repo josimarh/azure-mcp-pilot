@@ -41,7 +41,10 @@ from services.entra_pim import (
     get_pim_state_summary as pim_get_state_summary,
     list_pim_role_states as pim_list_role_states,
     pim_coverage,
+    pim_licensing,
 )
+from services.entra_licenses import license_inventory
+from services.license_posture import get_license_posture as license_get_posture
 from services.entra_users import list_users as entra_list_users
 from services.effective_access import (
     get_user_effective_azure_access as effective_get_user_effective_azure_access,
@@ -498,7 +501,34 @@ def get_pim_state_summary() -> dict:
     summary = pim_get_state_summary(rows)
     if isinstance(summary, dict):
         summary["coverage"] = pim_coverage()
+        summary["licensing"] = pim_licensing()
     return summary
+
+
+@read_only_tool()
+def get_license_posture() -> dict:
+    """
+    Cruza as licenças assinadas do tenant com o uso real dos recursos
+    de segurança que elas habilitam.
+
+    Use para perguntas como:
+    - Estamos pagando por recursos que não usamos?
+    - Temos Entra ID P2? O PIM está sendo usado?
+    - Quantas licenças estão ociosas?
+
+    Distingue explicitamente 'não licenciado', 'licenciado e não configurado'
+    e 'licenciado mas não avaliado', porque as três levam a ações diferentes.
+    """
+    return license_get_posture()
+
+
+@read_only_tool()
+def get_tenant_licenses() -> dict:
+    """
+    Lista os SKUs licenciados do tenant, com unidades habilitadas,
+    consumidas e ociosas, além dos planos de serviço ativos.
+    """
+    return license_inventory()
 
 
 @read_only_tool()
