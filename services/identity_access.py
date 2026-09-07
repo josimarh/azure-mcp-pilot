@@ -14,7 +14,7 @@ from services.azure_auth import get_credential, get_graph_token
 from services.azure_graph import is_mock_mode, sanitize_enabled
 
 ROOT = Path(__file__).resolve().parents[1]
-MOCK_FILE = ROOT / "data" / "mock_identity.json"
+MOCK_FILE = Path(__file__).resolve().parent / "data" / "mock_identity.json"
 GRAPH_USERS_URL = "https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName,mail,accountEnabled&$top=999"
 
 
@@ -82,6 +82,11 @@ def _sanitize_assignment_row(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _load_mock() -> dict[str, Any]:
+    if not MOCK_FILE.exists():
+        raise RuntimeError(
+            f"MOCK_MODE está ativo, mas os dados mock não foram encontrados em {MOCK_FILE}. "
+            "Defina MOCK_MODE=false para consultar o tenant real."
+        )
     return json.loads(MOCK_FILE.read_text(encoding="utf-8"))
 
 

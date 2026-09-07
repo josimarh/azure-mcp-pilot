@@ -13,7 +13,7 @@ from services.azure_auth import cached_query, get_credential, get_graph_token
 from services.azure_graph import is_mock_mode, sanitize_enabled
 
 ROOT = Path(__file__).resolve().parents[1]
-MOCK_IAM_FILE = ROOT / "data" / "mock_iam.json"
+MOCK_IAM_FILE = Path(__file__).resolve().parent / "data" / "mock_iam.json"
 
 
 def utc_now() -> datetime:
@@ -86,7 +86,10 @@ def parse_iso_datetime(value: str | None) -> datetime | None:
 
 def load_mock_iam() -> dict[str, Any]:
     if not MOCK_IAM_FILE.exists():
-        return {}
+        raise RuntimeError(
+            f"MOCK_MODE está ativo, mas os dados mock não foram encontrados em {MOCK_IAM_FILE}. "
+            "Defina MOCK_MODE=false para consultar o tenant real."
+        )
     return json.loads(MOCK_IAM_FILE.read_text(encoding="utf-8"))
 
 

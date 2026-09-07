@@ -12,7 +12,7 @@ import httpx
 from services.azure_auth import cached_query, get_arm_token
 
 ROOT = Path(__file__).resolve().parents[1]
-MOCK_FILE = ROOT / "data" / "mock_resources.json"
+MOCK_FILE = Path(__file__).resolve().parent / "data" / "mock_resources.json"
 ARG_ENDPOINT = "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2024-04-01"
 
 
@@ -57,7 +57,10 @@ def _sanitize_row(row: dict[str, Any]) -> dict[str, Any]:
 
 def _load_mock() -> list[dict[str, Any]]:
     if not MOCK_FILE.exists():
-        return []
+        raise RuntimeError(
+            f"MOCK_MODE está ativo, mas os dados mock não foram encontrados em {MOCK_FILE}. "
+            "Defina MOCK_MODE=false para consultar o tenant real."
+        )
     return json.loads(MOCK_FILE.read_text(encoding="utf-8"))
 
 

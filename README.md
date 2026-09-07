@@ -92,16 +92,6 @@ No Microsoft Graph, as permissões delegadas variam conforme a pergunta:
 
 Faltando alguma, apenas a área correspondente fica marcada como não avaliada. O restante continua funcionando normalmente.
 
-## Portal Streamlit (opcional)
-
-Existe uma interface web para quem prefere um portal ao chat:
-
-```bash
-uvx --from "azure-mcp-pilot[ui]" azure-mcp-pilot-ui
-```
-
-Ela funciona sem LLM (`AGENT_MODE=deterministic`), roteando a pergunta pela camada de capacidades. Perguntas diretas funcionam bem; perguntas muito informais e follow-ups conversacionais são melhor atendidos pelo Copilot Chat, que traz o contexto da conversa.
-
 ## Privacidade
 
 Os dados consultados são do **seu** tenant e trafegam entre a sua máquina, as APIs da Microsoft e o modelo do Copilot que **você** já usa. O projeto não envia nada para servidores de terceiros e não coleta telemetria.
@@ -129,14 +119,20 @@ O smoke test roda em modo mock e não toca no tenant.
 
 ```text
 mcp_server.py                       servidor MCP e registro das tools
-agent.py                            orquestração do chat (LLM opcional)
-app.py                              portal Streamlit
-launcher.py                         entry point da UI
 services/azure_auth.py              credencial, tokens e cache
 services/graph_capabilities.py      registry de capacidades
 services/capability_router.py       linguagem natural -> capacidade
 services/capability_executor.py     execução read-only validada
 services/azure_role_definitions.py  resolução de nomes de role Azure
+services/data/                      dados mock usados quando MOCK_MODE=true
+```
+
+O repositório também traz um portal Streamlit (`app.py` + `agent.py`) usado para
+desenvolvimento e demonstração. Ele não faz parte do pacote publicado, cuja
+superfície é apenas o servidor MCP. Para rodá-lo localmente:
+
+```bash
+streamlit run app.py
 ```
 
 ## Limitações conhecidas
