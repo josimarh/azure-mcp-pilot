@@ -7,3 +7,8 @@ dist/
 build/
 *.egg-info/
 .vscode/
+
+# Script local de publicacao (nao versionar)
+publish_pypi.ps1
+publish_pypi_v2.ps1
+pypi_token.txt
