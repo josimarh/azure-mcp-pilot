@@ -952,5 +952,20 @@ def graph_assessment(scope: str = "identity", limit: int = 200) -> dict:
     return capability_assessment(scope=scope, limit=limit)
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Entry point do MCP server (stdio) para uvx/console_scripts.
+
+    Carrega variáveis de ambiente (.env, se presente) e inicia o servidor no
+    transporte stdio, que é o esperado por clientes MCP como o VS Code/Copilot.
+    """
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except Exception:
+        pass
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "azure-mcp-pilot"
+version = "0.1.0"
+description = "MCP server read-only para auditoria de identidade Microsoft Entra + Azure RBAC (Graph capability discovery)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "josimarh", email = "josimar.hedler@outlook.com" }]
+keywords = ["mcp", "azure", "entra", "identity", "security", "rbac", "audit"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+]
+dependencies = [
+    "mcp[cli]>=2,<3",
+    "httpx>=0.28,<1",
+    "azure-identity>=1.17,<2",
+    "python-dotenv>=1.0,<2",
+]
+
+[project.optional-dependencies]
+ui = ["streamlit>=1.40,<2"]
+
+[project.scripts]
+azure-mcp-pilot = "mcp_server:main"
+azure-mcp-pilot-ui = "launcher:run_ui"
+
+[tool.setuptools]
+py-modules = ["agent", "app", "mcp_server", "launcher"]
+
+[tool.setuptools.packages.find]
+include = ["services*"]
+
+[tool.setuptools.package-data]
+"*" = ["data/*.json", "assets/*"]

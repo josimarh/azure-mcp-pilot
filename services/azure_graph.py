@@ -56,6 +56,8 @@ def _sanitize_row(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _load_mock() -> list[dict[str, Any]]:
+    if not MOCK_FILE.exists():
+        return []
     return json.loads(MOCK_FILE.read_text(encoding="utf-8"))
 
 
