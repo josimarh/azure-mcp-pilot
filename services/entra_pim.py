@@ -153,22 +153,17 @@ def _azure_role_definition_map() -> dict[str, str]:
 
 
 def _azure_pim_schedule_rows(state: str) -> list[dict[str, Any]]:
+    """Mantido para compatibilidade. A cobertura vem de _azure_pim_source."""
+    return _azure_pim_source(state)[0]
+
+
+def _azure_pim_source(state: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    from services.azure_pim import STATUS_EVALUATED, azure_pim_instances
     from services.azure_role_definitions import resolve_role
 
-    type_name = "microsoft.authorization/roleeligibilityscheduleinstances"
-    if state == "Active":
-        type_name = "microsoft.authorization/roleassignmentscheduleinstances"
-    rows = resource_graph_query(
-        "AuthorizationResources "
-        f"| where type =~ '{type_name}' "
-        "| extend principalId=tostring(properties.principalId), "
-        "principalType=tostring(properties.principalType), "
-        "roleDefinitionId=tolower(tostring(properties.roleDefinitionId)), "
-        "scope=tostring(properties.scope) "
-        "| project id, principalId, principalType, roleDefinitionId, scope"
-    )
+    result = azure_pim_instances(state)
     output: list[dict[str, Any]] = []
-    for item in rows:
+    for item in result["rows"]:
         role_id = str(item.get("roleDefinitionId") or "")
         resolved = resolve_role(role_id)
         output.append(
@@ -187,7 +182,18 @@ def _azure_pim_schedule_rows(state: str) -> list[dict[str, Any]]:
                 "origin": "PIM",
             }
         )
-    return output
+
+    coverage: dict[str, Any] = {
+        "source": f"Azure PIM ({state})",
+        "status": STATUS_EVALUATED if result["status"] == STATUS_EVALUATED else "NOT_EVALUATED",
+        "count": len(output),
+    }
+    if result.get("detail"):
+        coverage["detail"] = result["detail"]
+    if result.get("notEvaluatedSubscriptions"):
+        coverage["notEvaluatedSubscriptions"] = result["notEvaluatedSubscriptions"]
+        coverage["evaluatedSubscriptions"] = result.get("evaluatedSubscriptions")
+    return output, coverage
 
 
 def _collect_source(source: str, collector: Callable[[], list[dict[str, Any]]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -215,16 +221,32 @@ def list_pim_assignments_with_coverage() -> dict[str, Any]:
 
     rows: list[dict[str, Any]] = []
     coverage: list[dict[str, Any]] = []
-    sources: list[tuple[str, Callable[[], list[dict[str, Any]]]]] = [
+
+    entra_sources: list[tuple[str, Callable[[], list[dict[str, Any]]]]] = [
         ("Entra PIM (Eligible)", lambda: _entra_pim_schedule_rows("Eligible")),
         ("Entra PIM (Active)", lambda: _entra_pim_schedule_rows("Active")),
-        ("Azure PIM (Eligible)", lambda: _azure_pim_schedule_rows("Eligible")),
-        ("Azure PIM (Active)", lambda: _azure_pim_schedule_rows("Active")),
     ]
-    for source, collector in sources:
+    for source, collector in entra_sources:
         source_rows, status = _collect_source(source, collector)
         rows.extend(source_rows)
         coverage.append(status)
+
+    # O caminho Azure ja devolve a propria cobertura, porque um retorno vazio
+    # so pode ser afirmado como ausencia apos confirmacao na API autoritativa.
+    for state in ("Eligible", "Active"):
+        try:
+            azure_rows, azure_coverage = _azure_pim_source(state)
+        except Exception as exc:
+            rows_out: list[dict[str, Any]] = []
+            azure_rows, azure_coverage = rows_out, {
+                "source": f"Azure PIM ({state})",
+                "status": "ERROR",
+                "count": 0,
+                "detail": str(exc)[:300],
+            }
+        rows.extend(azure_rows)
+        coverage.append(azure_coverage)
+
     return {"rows": rows, "coverage": coverage}
 
 
