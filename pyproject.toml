@@ -27,6 +27,11 @@ dependencies = [
 [project.optional-dependencies]
 ui = ["streamlit>=1.40,<2"]
 
+[project.urls]
+Homepage = "https://github.com/josimarh/azure-mcp-pilot"
+Repository = "https://github.com/josimarh/azure-mcp-pilot"
+Issues = "https://github.com/josimarh/azure-mcp-pilot/issues"
+
 [project.scripts]
 azure-mcp-pilot = "mcp_server:main"
 azure-mcp-pilot-ui = "launcher:run_ui"
