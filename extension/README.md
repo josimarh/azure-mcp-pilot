@@ -33,11 +33,18 @@ There is no API key to manage. Authentication reuses your Azure CLI session, and
 
 ## Getting started
 
-1. Install the extension
-2. Run `az login` in a terminal
-3. Open Copilot Chat in **agent mode** and ask
+1. Install the extension.
+2. Run `az login` in a terminal.
+3. If VS Code was already open when you installed IdenGraph, run **Developer: Reload Window** from the Command Palette (`Ctrl+Shift+P`).
+4. Open a **new** GitHub Copilot Chat in **Agent** mode.
+5. Type `/mcp` and confirm that **IdenGraph** appears in the server list.
+6. Ask your question in natural language.
 
-IdenGraph tools appear in the tools picker and are invoked automatically based on your question.
+IdenGraph tools are invoked automatically based on your question. You do not need to create an `mcp.json` file or run `uvx idengraph` yourself.
+
+### Check readiness
+
+Run **IdenGraph: Show readiness status** from the Command Palette (`Ctrl+Shift+P`) at any time. It shows whether the extension is active, the MCP definition is registered, `uvx` is available, and Azure CLI is authenticated. VS Code starts the MCP process only when Copilot needs a tool, so `/mcp` in a new Agent chat is the authoritative connection check.
 
 ## Settings
 

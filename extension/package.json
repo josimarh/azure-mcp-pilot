@@ -2,7 +2,7 @@
   "name": "idengraph",
   "displayName": "IdenGraph",
   "description": "Identity & Access intelligence powered by Microsoft Graph and MCP. Read-only auditing for Microsoft Entra ID and Azure RBAC in Copilot Chat.",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "publisher": "josimarh",
   "license": "MIT",
   "icon": "icon.png",
@@ -37,9 +37,18 @@
     "url": "https://github.com/josimarh/idengraph/issues"
   },
   "homepage": "https://github.com/josimarh/idengraph#readme",
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:idengraph.showStatus"
+  ],
   "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "idengraph.showStatus",
+        "title": "IdenGraph: Show readiness status"
+      }
+    ],
     "mcpServerDefinitionProviders": [
       {
         "id": "idengraph.provider",

@@ -7,6 +7,8 @@ const run = promisify(execFile);
 const PROVIDER_ID = 'idengraph.provider';
 const SERVER_LABEL = 'IdenGraph';
 const PACKAGE_NAME = 'idengraph';
+const STATUS_COMMAND = 'idengraph.showStatus';
+const RELOAD_COMMAND = 'workbench.action.reloadWindow';
 
 /**
  * O servidor MCP é um pacote Python executado via `uvx`. A extensão não o
@@ -16,12 +18,25 @@ const PACKAGE_NAME = 'idengraph';
  */
 export function activate(context: vscode.ExtensionContext): void {
 	const didChangeEmitter = new vscode.EventEmitter<void>();
+	const output = vscode.window.createOutputChannel(SERVER_LABEL);
+	const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+	statusBar.command = STATUS_COMMAND;
+	statusBar.tooltip = 'Show IdenGraph readiness status';
+	statusBar.text = '$(shield) IdenGraph';
+	statusBar.show();
 
 	context.subscriptions.push(
+		output,
+		statusBar,
 		vscode.workspace.onDidChangeConfiguration(event => {
 			if (event.affectsConfiguration('idengraph')) {
 				didChangeEmitter.fire();
 			}
+		}),
+		vscode.commands.registerCommand(STATUS_COMMAND, async () => {
+			const readiness = await getReadiness();
+			writeStatus(output, readiness);
+			output.show(true);
 		})
 	);
 
@@ -99,6 +114,8 @@ export function activate(context: vscode.ExtensionContext): void {
 			}
 		})
 	);
+
+	void showFirstRunGuidance(context);
 }
 
 export function deactivate(): void {
@@ -129,5 +146,59 @@ async function isAzureSignedIn(): Promise<boolean> {
 		return Boolean(account.id);
 	} catch {
 		return false;
+	}
+}
+
+interface Readiness {
+	readonly uvAvailable: boolean;
+	readonly azureSignedIn: boolean;
+	readonly usingMock: boolean;
+}
+
+async function getReadiness(): Promise<Readiness> {
+	const usingMock = vscode.workspace.getConfiguration('idengraph').get<boolean>('useMockData', false);
+	const uvAvailable = await isCommandAvailable('uvx', ['--version']);
+	const azureSignedIn = usingMock ? false : await isAzureSignedIn();
+
+	return { uvAvailable, azureSignedIn, usingMock };
+}
+
+function writeStatus(output: vscode.OutputChannel, readiness: Readiness): void {
+	const azureStatus = readiness.usingMock
+		? 'Not required (mock data is enabled)'
+		: readiness.azureSignedIn
+			? 'Authenticated'
+			: 'Not authenticated - run "az login" in a terminal';
+
+	output.clear();
+	output.appendLine('IdenGraph readiness status');
+	output.appendLine('=========================');
+	output.appendLine('Extension: Active');
+	output.appendLine('MCP definition: Registered with VS Code');
+	output.appendLine(`uvx: ${readiness.uvAvailable ? 'Found' : 'Not found - install uv'}`);
+	output.appendLine(`Azure CLI: ${azureStatus}`);
+	output.appendLine('');
+	output.appendLine('Connection check: Open a new GitHub Copilot Chat in Agent mode,');
+	output.appendLine('then run /mcp. "IdenGraph" must appear in the server list.');
+	output.appendLine('VS Code starts the MCP process only when Copilot needs one of its tools.');
+}
+
+async function showFirstRunGuidance(context: vscode.ExtensionContext): Promise<void> {
+	const seenVersion = context.globalState.get<string>('onboardingVersion');
+	const version = context.extension.packageJSON.version as string;
+	if (seenVersion === version) {
+		return;
+	}
+
+	await context.globalState.update('onboardingVersion', version);
+	const choice = await vscode.window.showInformationMessage(
+		'IdenGraph is registered with VS Code. Open a new GitHub Copilot Chat in Agent mode, then run /mcp to confirm it is connected.',
+		'Show status',
+		'Reload window'
+	);
+	if (choice === 'Show status') {
+		await vscode.commands.executeCommand(STATUS_COMMAND);
+	} else if (choice === 'Reload window') {
+		await vscode.commands.executeCommand(RELOAD_COMMAND);
 	}
 }
