@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Roda em modo mock: nunca consulta um tenant real.
+      - name: Smoke test
+        run: python test_smoke.py
+
+      - name: Check version sync
+        run: python scripts/set_version.py --check
+
+      - name: Build package
+        run: |
+          pip install build twine
+          python -m build
+          twine check dist/*
+
+      # O empacotamento ja vazou um token uma vez; esta verificacao existe
+      # para que isso nao dependa de revisao manual.
+      - name: Ensure no secrets in package
+        run: |
+          if python -c "
+          import glob, tarfile, zipfile, sys
+          bad = []
+          for whl in glob.glob('dist/*.whl'):
+              bad += [n for n in zipfile.ZipFile(whl).namelist() if 'token' in n.lower() or n.endswith('.ps1')]
+          for sdist in glob.glob('dist/*.tar.gz'):
+              bad += [n for n in tarfile.open(sdist).getnames() if 'token' in n.lower() or n.endswith('.ps1')]
+          print('\n'.join(bad))
+          sys.exit(1 if bad else 0)
+          "; then
+            echo "Nenhum arquivo sensivel no pacote."
+          else
+            echo "::error::Arquivo sensivel encontrado no pacote."
+            exit 1
+          fi
+
+  extension:
+    name: Extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install
+        working-directory: extension
+        run: npm ci
+
+      - name: Compile
+        working-directory: extension
+        run: npm run compile
+
+      - name: Package
+        working-directory: extension
+        run: npx --yes @vscode/vsce@latest package --no-dependencies
+
+      - name: Ensure no secrets in vsix
+        working-directory: extension
+        run: |
+          if unzip -l *.vsix | grep -Ei "token|\.ps1"; then
+            echo "::error::Arquivo sensivel encontrado no .vsix."
+            exit 1
+          fi
+          echo "Nenhum arquivo sensivel no .vsix."

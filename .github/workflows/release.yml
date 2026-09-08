@@ -1,0 +1,132 @@
+name: Release
+
+# Publica o pacote Python e a extensao a partir de uma unica tag.
+#
+# Uso:
+#   python scripts/set_version.py 0.2.0
+#   git commit -am "release: 0.2.0" && git push
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# O PyPI usa Trusted Publishing (OIDC), entao nao ha token de PyPI aqui.
+# O Marketplace exige o secret VSCE_PAT.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versao a publicar (ex.: 0.2.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publicando versao $VERSION"
+
+      # Uma tag que nao corresponde aos arquivos publicaria a versao errada,
+      # entao a divergencia falha aqui em vez de virar um release incorreto.
+      - name: Check version consistency
+        run: |
+          python scripts/set_version.py --check
+          FILE_VERSION=$(python -c "import re,pathlib;print(re.search(r'^version\s*=\s*\"([^\"]+)\"',pathlib.Path('pyproject.toml').read_text(),re.M).group(1))")
+          if [ "$FILE_VERSION" != "${{ steps.version.outputs.version }}" ]; then
+            echo "::error::A tag pede ${{ steps.version.outputs.version }}, mas os arquivos estao em $FILE_VERSION."
+            echo "Rode: python scripts/set_version.py ${{ steps.version.outputs.version }}"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Smoke test
+        run: python test_smoke.py
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write # necessario para o Trusted Publishing do PyPI
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build
+        run: |
+          pip install build twine
+          python -m build
+          twine check dist/*
+
+      # Nao ha token: o PyPI autentica via OIDC do proprio GitHub Actions.
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-marketplace:
+    name: Publish to VS Code Marketplace
+    needs: [verify, publish-pypi] # a extensao executa o pacote; ele precisa existir antes
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install and compile
+        working-directory: extension
+        run: |
+          npm ci
+          npm run compile
+
+      - name: Publish
+        working-directory: extension
+        run: npx --yes @vscode/vsce@latest publish --no-dependencies --pat "$VSCE_PAT"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+  github-release:
+    name: Create GitHub release
+    needs: [verify, publish-pypi, publish-marketplace]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ needs.verify.outputs.version }}" \
+            --title "IdenGraph v${{ needs.verify.outputs.version }}" \
+            --generate-notes \
+            --verify-tag || echo "Release ja existe, seguindo."
