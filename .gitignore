@@ -20,3 +20,5 @@ extension/*.vsix
 extension/LICENSE
 extension/vsce_token.txt
 extension/publish_marketplace.ps1
+setup_github_secrets.ps1
+vsce_token.txt
