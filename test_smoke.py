@@ -54,6 +54,7 @@ async def main() -> None:
         assert "get_owned_objects" in names
         assert "detect_toxic_combinations" in names
         assert "compute_identity_blast_radius" in names
+        assert "graph_list" in names
         result = await client.call_tool("get_environment_summary", {})
         assert not result.is_error
         summary = _content_to_dict(result)
@@ -82,10 +83,24 @@ async def main() -> None:
         privileged_azure = await client.call_tool("list_privileged_azure_role_assignments", {"limit": 10})
         privileged_azure_payload = _content_to_dict(privileged_azure)
         assert "riskScore" in privileged_azure_payload["assignments"][0]
+        role_assignments = await client.call_tool("list_azure_role_assignments", {"limit": 10})
+        role_assignments_payload = _content_to_dict(role_assignments)
+        role_assignments_text = json.dumps(role_assignments_payload)
+        assert '"principalId": "u-001"' not in role_assignments_text
+        assert "/subscriptions/sub-prd" not in role_assignments_text
+        privileged_text = json.dumps(privileged_azure_payload)
+        assert '"principalId": "u-001"' not in privileged_text
+        assert "/subscriptions/sub-prd" not in privileged_text
         users = await client.call_tool("list_users", {"limit": 10})
         users_list = _content_to_dict(users)
         assert users_list["count"] == 4
         assert "mail" in users_list["users"][0]
+        entra_users = await client.call_tool("list_entra_users", {"limit": 10})
+        entra_users_payload = _content_to_dict(entra_users)
+        assert entra_users_payload["count"] >= 1
+        entra_users_text = json.dumps(entra_users_payload)
+        assert "ana.silva@contoso.com" not in entra_users_text
+        assert '"objectId": "u-001"' not in entra_users_text
         iam_query = await client.call_tool(
             "iam_natural_language_query",
             {"question": "Quem possui Global Administrator?", "limit": 10},
@@ -118,6 +133,27 @@ async def main() -> None:
         agents_payload = _content_to_dict(agents)
         assert agents_payload["count"] >= 1
         assert "riskScore" in agents_payload["agents"][0]
+        graph_users = await client.call_tool(
+            "graph_list",
+            {"capability_id": "graph.users.list", "limit": 10},
+        )
+        graph_users_payload = _content_to_dict(graph_users)
+        assert not graph_users.is_error
+        assert graph_users_payload["execution_mode"] == "mock"
+        assert graph_users_payload["count"] >= 1
+        resource_inventory = await client.call_tool(
+            "graph_query",
+            {
+                "capability_id": "azure.resources.inventory",
+                "query": "Resources | where type =~ 'microsoft.compute/virtualmachines'",
+                "scope": "",
+                "limit": 10,
+            },
+        )
+        resource_inventory_payload = _content_to_dict(resource_inventory)
+        assert not resource_inventory.is_error
+        assert resource_inventory_payload["execution_mode"] == "mock"
+        assert resource_inventory_payload["count"] >= 1
         agent_query = await client.call_tool(
             "agent_natural_language_query",
             {"question": "Quais agents não possuem owner?", "limit": 10},

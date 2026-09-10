@@ -21,6 +21,7 @@ from services.entra_pim import answer_pim_question, safe_list_pim_assignments
 from services.entra_roles import list_privileged_directory_role_members
 from services.entra_users import list_disabled_users, list_guest_users, list_users, present_users
 from services.entra_workload_identities import list_managed_identities, list_service_principals
+from services.identity_access import get_identity_access_summary
 from services.agent_identities import answer_agent_question
 from services.effective_access import get_user_effective_azure_access, list_orphan_role_assignments
 from services.iam_common import safe_collect, sanitize_assignment
@@ -284,8 +285,60 @@ def _recommendation_for_control(control: str) -> str:
     return mapping.get(control, "Investigar evidência e aplicar remediação baseada em least privilege.")
 
 
+def _classify_environment_scale(
+    total_users: Any,
+    total_resources: Any,
+    resource_groups: Any,
+) -> dict[str, Any]:
+    """Classifica o tenant como lab/pequeno ou enterprise.
+
+    O objetivo é evitar aplicar um roadmap de 90 dias de maturidade
+    corporativa a um tenant de laboratório com poucos usuários e nenhum
+    recurso provisionado — o que confunde mais do que ajuda o usuário.
+    Números que não puderam ser avaliados (NOT_EVALUATED) não contam como
+    zero: nesse caso a escala fica "unknown" em vez de "lab".
+    """
+    users_n = total_users if isinstance(total_users, int) else None
+    resources_n = total_resources if isinstance(total_resources, int) else None
+    rg_n = resource_groups if isinstance(resource_groups, int) else None
+
+    if users_n is None:
+        return {
+            "scale": "unknown",
+            "label": "Escala do ambiente não avaliada",
+            "reason": "Total de usuários não pôde ser confirmado (permissão insuficiente).",
+        }
+
+    has_workload = bool((resources_n or 0) > 0 or (rg_n or 0) > 0)
+
+    if users_n <= 10 and not has_workload:
+        return {
+            "scale": "lab",
+            "label": "Tenant pequeno / laboratório",
+            "reason": (
+                f"{users_n} usuário(s) e nenhum recurso Azure provisionado. "
+                "Isso normalmente indica um tenant de testes, demonstração ou estudo pessoal, "
+                "não um ambiente de produção."
+            ),
+        }
+    if users_n <= 25:
+        return {
+            "scale": "small",
+            "label": "Tenant pequeno",
+            "reason": f"{users_n} usuário(s) no tenant, com alguma carga de trabalho real provisionada.",
+        }
+    return {
+        "scale": "enterprise",
+        "label": "Tenant de porte corporativo",
+        "reason": f"{users_n} usuário(s) no tenant.",
+    }
+
+
 def run_iam_assessment(limit_risks: int = 10) -> dict[str, Any]:
     controls: list[dict[str, Any]] = []
+
+    identity_summary = safe_collect("identity-access-summary", get_identity_access_summary)
+    controls.append(identity_summary)
 
     privileged = safe_collect("privileged-users", lambda: _build_privileged_users_view(100))
     controls.append(privileged)
@@ -321,6 +374,8 @@ def run_iam_assessment(limit_risks: int = 10) -> dict[str, Any]:
     controls.append(ca)
     subscriptions_inventory = safe_collect("subscriptions-inventory", summarize_subscriptions)
     controls.append(subscriptions_inventory)
+    resources_summary = safe_collect("resources-summary", summarize_resources)
+    controls.append(resources_summary)
     management_groups = safe_collect("management-groups", list_management_groups)
     controls.append(management_groups)
     subscription_direct_access = safe_collect("subscription-direct-access", get_subscription_direct_access_summary)
@@ -559,8 +614,16 @@ def run_iam_assessment(limit_risks: int = 10) -> dict[str, Any]:
     guest_rows = controls_map.get("guest-users", {}).get("data", []) if controls_map.get("guest-users", {}).get("ok") else []
     mfa_data = controls_map.get("privileged-mfa", {}).get("data", {}) if controls_map.get("privileged-mfa", {}).get("ok") else {}
     subscriptions_data = controls_map.get("subscriptions-inventory", {}).get("data", {}) if controls_map.get("subscriptions-inventory", {}).get("ok") else {}
+    resources_data = controls_map.get("resources-summary", {}).get("data", {}) if controls_map.get("resources-summary", {}).get("ok") else {}
     management_groups_data = controls_map.get("management-groups", {}).get("data", []) if controls_map.get("management-groups", {}).get("ok") else []
     subscription_direct_data = controls_map.get("subscription-direct-access", {}).get("data", {}) if controls_map.get("subscription-direct-access", {}).get("ok") else {}
+    identity_summary_data = controls_map.get("identity-access-summary", {}).get("data", {}) if controls_map.get("identity-access-summary", {}).get("ok") else {}
+
+    environment_scale = _classify_environment_scale(
+        total_users=identity_summary_data.get("total_users"),
+        total_resources=resources_data.get("total_resources"),
+        resource_groups=resources_data.get("resource_groups"),
+    )
 
     metrics = {
         "privilegedHumanIdentities": privileged_summary.get("total_privileged_users")
@@ -730,6 +793,12 @@ def run_iam_assessment(limit_risks: int = 10) -> dict[str, Any]:
         },
     ]
 
+    scale_key = str(environment_scale.get("scale"))
+    resources_known = isinstance(resources_data.get("total_resources"), int) and isinstance(resources_data.get("resource_groups"), int)
+    no_real_workload = resources_known and resources_data.get("total_resources") == 0 and resources_data.get("resource_groups") == 0
+
+    coverage_gap_lines = [f"- {item['control']}: {item['note']}" for item in not_assessed]
+
     narrative_lines = [
         "MICROSOFT IDENTITY SECURITY ASSESSMENT",
         "",
@@ -737,6 +806,20 @@ def run_iam_assessment(limit_risks: int = 10) -> dict[str, Any]:
         "",
         "EXECUTIVE SUMMARY",
         f"- Identity Security Posture: **{posture_level}**",
+        f"- Ambiente: **{environment_scale.get('label')}** — {environment_scale.get('reason')}",
+    ]
+    if coverage_gap_lines:
+        narrative_lines.append(
+            f"- ⚠️ **{len(not_assessed)} controle(s) não avaliado(s)** (permissão insuficiente ou dado indisponível) — "
+            "trate os achados abaixo como parciais até resolver esses gaps:"
+        )
+        narrative_lines.extend(coverage_gap_lines)
+    if no_real_workload:
+        narrative_lines.append(
+            "- ℹ️ **Nenhum recurso Azure provisionado** (0 resource groups, 0 recursos) — não há workload de produção "
+            "rodando neste ambiente hoje; priorize a limpeza de identidade antes de investir em governança operacional."
+        )
+    narrative_lines += [
         f"- Top risks priorizados: **{len(risks_sorted)}**",
         f"- Controles não avaliados: **{len(not_assessed)}**",
         f"- Subscriptions visíveis: **{_metric_text(metrics.get('visibleSubscriptions'))}**",
@@ -766,7 +849,10 @@ def run_iam_assessment(limit_risks: int = 10) -> dict[str, Any]:
         narrative_lines.append("")
         narrative_lines.append("TOP RISKS")
         for idx, risk in enumerate(risks_sorted, start=1):
-            narrative_lines.append(f"{idx}. {risk['risk']} (Severidade: {risk['severity']})")
+            severity_note = ""
+            if scale_key == "lab" and str(risk.get("severity")) in {"Critical", "High"}:
+                severity_note = " — impacto contido pelo pequeno porte deste tenant, mas ainda recomendado corrigir"
+            narrative_lines.append(f"{idx}. {risk['risk']} (Severidade: {risk['severity']}){severity_note}")
 
     if not_assessed:
         narrative_lines.append("")
@@ -776,17 +862,39 @@ def run_iam_assessment(limit_risks: int = 10) -> dict[str, Any]:
                 f"- {item['control']}: {item['note']}"
             )
 
-    remediation = [
-        "REMEDIATION ROADMAP",
-        "1. Reduzir Global Administrators e Owners ao mínimo operacional.",
-        "2. Remover privilégios de contas desabilitadas e convidados privilegiados.",
-        "3. Corrigir aplicações sem owner e rotacionar secrets expirados/próximos da expiração.",
-        "4. Revisar permissões críticas de Microsoft Graph e custom roles com wildcard.",
-        "5. Priorizar revisão de identidades com privilégio simultâneo Entra + Azure.",
-        "6. Remediar role assignments órfãos e validar ciclo de vida das identidades.",
-        "7. Priorizar remoção/downgrade de privilégios com baixa necessidade operacional (least privilege).",
-        "8. Auditar periodicamente a timeline de ganho/perda de privilégios e validar aprovações.",
-    ]
+    if scale_key == "lab":
+        remediation = [
+            "REMEDIATION ROADMAP (tenant pequeno / laboratório)",
+            "1. Reduzir Global Administrators e Owners ao mínimo necessário para você continuar operando o tenant.",
+            "2. Separar a mesma identidade de acumular Global Administrator + Owner simultaneamente, quando possível.",
+            "3. Remover role assignments órfãos e revisar aplicações sem owner.",
+            "4. Ativar Conditional Access básico (MFA para admins) se planeja manter o tenant por mais tempo.",
+            "5. Revisitar esta lista periodicamente conforme o tenant crescer (mais usuários/recursos reais).",
+        ]
+    else:
+        remediation = [
+            "REMEDIATION ROADMAP",
+            "1. Reduzir Global Administrators e Owners ao mínimo operacional.",
+            "2. Remover privilégios de contas desabilitadas e convidados privilegiados.",
+            "3. Corrigir aplicações sem owner e rotacionar secrets expirados/próximos da expiração.",
+            "4. Revisar permissões críticas de Microsoft Graph e custom roles com wildcard.",
+            "5. Priorizar revisão de identidades com privilégio simultâneo Entra + Azure.",
+            "6. Remediar role assignments órfãos e validar ciclo de vida das identidades.",
+            "7. Priorizar remoção/downgrade de privilégios com baixa necessidade operacional (least privilege).",
+            "8. Auditar periodicamente a timeline de ganho/perda de privilégios e validar aprovações.",
+        ]
+
+    if scale_key == "lab":
+        roadmap_phases = [
+            {"phase": "Immediate", "focus": "Reduzir admins/owners redundantes e resolver combinações tóxicas"},
+            {"phase": "WhenGrowing", "focus": "Adicionar Conditional Access e PIM somente quando houver workload real ou mais usuários"},
+        ]
+    else:
+        roadmap_phases = [
+            {"phase": "Immediate", "focus": "Critical and high privilege exposure"},
+            {"phase": "ShortTerm", "focus": "Ownership, credential hygiene, and RBAC scope reduction"},
+            {"phase": "Continuous", "focus": "Periodic timeline, SoD, and governance controls"},
+        ]
 
     return {
         "summary": {"total_risks": len(risks_sorted), "not_assessed_controls": len(not_assessed)},
@@ -797,6 +905,7 @@ def run_iam_assessment(limit_risks: int = 10) -> dict[str, Any]:
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "scope": {"type": "TenantVisibleScope", "description": "Escopo visível para a identidade autenticada"},
         "coverage": coverage,
+        "environmentScale": environment_scale,
         "auditChecklist": checklist,
         "inventory": {
             "privilegedIdentities": len(identities_rows) if controls_map.get("correlated-privileges", {}).get("ok") else "NOT_EVALUATED",
@@ -812,13 +921,7 @@ def run_iam_assessment(limit_risks: int = 10) -> dict[str, Any]:
         "findings": findings,
         "topRisks": findings[: max(1, int(limit_risks))],
         "recommendations": [{"priority": idx + 1, "action": item} for idx, item in enumerate(remediation)],
-        "roadmap": {
-            "phases": [
-                {"phase": "Immediate", "focus": "Critical and high privilege exposure"},
-                {"phase": "ShortTerm", "focus": "Ownership, credential hygiene, and RBAC scope reduction"},
-                {"phase": "Continuous", "focus": "Periodic timeline, SoD, and governance controls"},
-            ]
-        },
+        "roadmap": {"phases": roadmap_phases},
         "limitations": limitations,
         "technicalAppendix": {
             "evaluatedControls": [

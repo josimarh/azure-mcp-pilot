@@ -60,7 +60,7 @@ Run **IdenGraph: Show readiness status** from the Command Palette (`Ctrl+Shift+P
 
 **No false zero.** If a permission is missing, the answer is `PERMISSION_DENIED` with `NOT_EVALUATED` coverage — never `0`. "I could not evaluate this" and "this does not exist" are different answers, and conflating them in an audit is worse than not answering, because a false zero looks like a clean result.
 
-**Read-only by construction.** Only `GET`, `LIST`, `QUERY`, `ASSESS`, and `CORRELATE`. There is no LLM-generated KQL and no free-form endpoint: every query goes through a capability registry with an allowlist and validation.
+**Read-only by construction.** Only `GET`, `LIST`, `QUERY`, `ASSESS`, and `CORRELATE`. The `graph_query` tool can receive read-only KQL generated from a user request, but it does not accept arbitrary endpoints: the capability registry selects the data source, and the executor blocks mutation operators and external-access constructs before sending the query.
 
 ## Permissions
 

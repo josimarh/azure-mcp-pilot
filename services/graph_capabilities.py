@@ -91,6 +91,7 @@ class Capability:
     keywords: tuple[str, ...] = ()
     notes: str = ""
     service_hint: str = ""
+    is_primary_for_assessment: bool = False
 
     @property
     def supports_delegated(self) -> bool:
@@ -130,6 +131,7 @@ class Capability:
             "keywords": list(self.keywords),
             "notes": self.notes,
             "service_hint": self.service_hint,
+            "is_primary_for_assessment": self.is_primary_for_assessment,
         }
 
 
@@ -157,7 +159,10 @@ _CAPABILITIES: tuple[Capability, ...] = (
         description="Lista usuários do diretório (membros e convidados).",
         operations=(OP_LIST, OP_FILTER, OP_GET),
         endpoint=f"{GRAPH_BASE_V1}/users",
-        supported_params=("$select", "$filter", "$top", "$search", "$count", "$orderby"),
+        # $search/$count/$orderby ainda não são implementados em
+        # _build_graph_url(); mantidos fora até haver suporte a
+        # ConsistencyLevel: eventual e ao parâmetro correspondente.
+        supported_params=("$select", "$filter", "$top"),
         supported_filters=("userType", "accountEnabled", "displayName", "userPrincipalName", "mail"),
         returned_properties=(
             "id",
@@ -197,7 +202,8 @@ _CAPABILITIES: tuple[Capability, ...] = (
         description="Lista grupos do diretório, incluindo grupos de segurança e M365.",
         operations=(OP_LIST, OP_FILTER, OP_GET),
         endpoint=f"{GRAPH_BASE_V1}/groups",
-        supported_params=("$select", "$filter", "$top", "$count", "$orderby"),
+        # $count/$orderby ainda não são implementados em _build_graph_url().
+        supported_params=("$select", "$filter", "$top"),
         supported_filters=("displayName", "securityEnabled", "mailEnabled", "groupTypes"),
         returned_properties=("id", "displayName", "securityEnabled", "groupTypes"),
         delegated_permissions=("Group.Read.All", "Directory.Read.All"),
@@ -313,6 +319,7 @@ _CAPABILITIES: tuple[Capability, ...] = (
         keywords=("atribuicao de role", "role assignment entra", "permanente no entra"),
         support_status=STATUS_PARTIAL,
         notes="Requer $filter em muitas consultas; correlação de principal feita localmente.",
+        is_primary_for_assessment=True,
     ),
     # ------------------------------------------------------------------ PIM
     _cap(
@@ -338,6 +345,7 @@ _CAPABILITIES: tuple[Capability, ...] = (
         requires_license="Microsoft Entra ID P2 / Governance",
         keywords=("pim", "elegivel", "elegibilidade", "eligible", "just in time", "jit", "ativar role"),
         service_hint="entra_pim.list_eligible_directory_roles",
+        is_primary_for_assessment=True,
     ),
     _cap(
         id="graph.pim.active_directory_roles",
@@ -373,7 +381,8 @@ _CAPABILITIES: tuple[Capability, ...] = (
         description="Lista registros de aplicação (app registrations) do tenant.",
         operations=(OP_LIST, OP_FILTER, OP_GET),
         endpoint=f"{GRAPH_BASE_V1}/applications",
-        supported_params=("$select", "$filter", "$top", "$count"),
+        # $count ainda não é implementado em _build_graph_url().
+        supported_params=("$select", "$filter", "$top"),
         supported_filters=("displayName", "appId", "publisherDomain"),
         returned_properties=(
             "id",
@@ -474,7 +483,8 @@ _CAPABILITIES: tuple[Capability, ...] = (
         description="Lista service principals (aplicações empresariais, MIs e apps first-party).",
         operations=(OP_LIST, OP_FILTER, OP_GET),
         endpoint=f"{GRAPH_BASE_V1}/servicePrincipals",
-        supported_params=("$select", "$filter", "$top", "$count"),
+        # $count ainda não é implementado em _build_graph_url().
+        supported_params=("$select", "$filter", "$top"),
         supported_filters=("displayName", "appId", "servicePrincipalType", "accountEnabled"),
         returned_properties=(
             "id",
@@ -517,7 +527,15 @@ _CAPABILITIES: tuple[Capability, ...] = (
         returned_properties=("id", "displayName", "userPrincipalName"),
         delegated_permissions=("Application.Read.All", "Directory.Read.All"),
         application_permissions=("Application.Read.All", "Directory.Read.All"),
-        keywords=("dono do service principal", "owner do sp", "proprietario do sp"),
+        keywords=(
+            "dono do service principal",
+            "owner do sp",
+            "proprietario do sp",
+            "service principal sem owner",
+            "service principals sem owner",
+            "service principal esta sem owner",
+            "service principals estao sem owner",
+        ),
         service_hint="agent_identities._list_sp_owners",
     ),
     _cap(
@@ -541,8 +559,8 @@ _CAPABILITIES: tuple[Capability, ...] = (
             "appRoleId",
             "resourceId",
         ),
-        delegated_permissions=("Application.Read.All", "Directory.Read.All"),
-        application_permissions=("Application.Read.All", "Directory.Read.All"),
+        delegated_permissions=("Application.Read.All",),
+        application_permissions=("Application.Read.All",),
         keywords=(
             "app role",
             "permissao de aplicacao",
@@ -610,8 +628,8 @@ _CAPABILITIES: tuple[Capability, ...] = (
             "isPasswordlessCapable",
             "methodsRegistered",
         ),
-        delegated_permissions=("AuditLog.Read.All", "Reports.Read.All"),
-        application_permissions=("AuditLog.Read.All", "Reports.Read.All"),
+        delegated_permissions=("AuditLog.Read.All",),
+        application_permissions=("AuditLog.Read.All",),
         requires_license="Microsoft Entra ID P1 para relatórios completos",
         keywords=("mfa", "autenticacao", "passkey", "fido2", "authenticator", "sms", "metodo fraco", "passwordless"),
         service_hint="entra_authentication.get_authentication_strength_summary",
@@ -926,6 +944,7 @@ _CAPABILITIES: tuple[Capability, ...] = (
         keywords=("owner", "contributor", "azure rbac", "rbac", "role assignment azure", "permissao no azure"),
         service_hint="azure_rbac.list_role_assignments",
         notes="Fonte Azure. Não confundir com roles de diretório do Entra ID.",
+        is_primary_for_assessment=True,
     ),
     _cap(
         id="azure.rbac.deny_assignments",

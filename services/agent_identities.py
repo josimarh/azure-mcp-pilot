@@ -932,6 +932,8 @@ def _enrich_agent(agent: dict[str, Any], data: dict[str, Any], context: dict[str
             "ownerCount": len(owners),
             "graphPermissions": graph,
             "graphPermissionsStatus": graph_status,
+            "effectivePermissionsCount": len(graph.get("applicationPermissions", []) or []) + len(graph.get("delegatedPermissions", []) or []),
+            "hasEffectivePermissions": bool((graph.get("applicationPermissions") or []) or (graph.get("delegatedPermissions") or [])),
             "azureRoleAssignments": azure,
             "azureRbacStatus": azure_status,
             "azureAccess": len(azure) > 0,

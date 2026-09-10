@@ -56,6 +56,19 @@ def _params_for(capability_id: str, limit: int, extra: dict[str, Any] | None = N
     return params
 
 
+def _pick_primary_capability(caps: list[Any]) -> Any:
+    """Escolhe a capability mais representativa de um domínio para assessment.
+
+    Prefere a(s) capability(ies) marcada(s) explicitamente com
+    ``is_primary_for_assessment=True`` no registry. Quando nenhuma capability
+    do domínio declara essa preferência (caso comum de domínios com uma única
+    fonte), preserva o comportamento anterior de usar a primeira disponível,
+    para não alterar assessments já estáveis.
+    """
+    primary = [c for c in caps if getattr(c, "is_primary_for_assessment", False)]
+    return primary[0] if primary else caps[0]
+
+
 # --------------------------------------------------------------------------
 # Discovery
 # --------------------------------------------------------------------------
@@ -364,7 +377,7 @@ def capability_directory_objects(
         if not caps:
             gaps.append(domain)
             continue
-        cap = caps[0]
+        cap = _pick_primary_capability(caps)
         result = capability_execute(cap.id, _params_for(cap.id, limit))
         (results if result.get("ok") else failures).append(result)
 
@@ -456,7 +469,7 @@ def capability_assessment(scope: str = "identity", limit: int = 200) -> dict[str
             )
             continue
 
-        cap = available[0]
+        cap = _pick_primary_capability(available)
         result = capability_execute(cap.id, _params_for(cap.id, limit), operation="list")
         if result.get("ok"):
             results.append(result)

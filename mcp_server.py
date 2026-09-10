@@ -70,6 +70,7 @@ from services.iam_assessment import (
     get_subscription_direct_access_summary as iam_get_subscription_direct_access_summary,
     run_iam_assessment as iam_run_assessment,
 )
+from services.iam_common import sanitize_assignment, sanitize_identity
 from services.role_risk import role_risk_score
 from services.identity_360 import answer_identity_360 as identity_answer_identity_360
 from services.entra_authentication import (
@@ -198,14 +199,16 @@ def list_entra_users(limit: int = 20) -> dict:
     rows = []
     for user in users[: max(1, min(int(limit), 100))]:
         rows.append(
-            {
-                "name": user.get("displayName"),
-                "displayName": user.get("displayName"),
-                "userPrincipalName": user.get("userPrincipalName"),
-                "mail": user.get("mail") or user.get("userPrincipalName"),
-                "objectId": user.get("id"),
-                "identityType": "User",
-            }
+            sanitize_identity(
+                {
+                    "name": user.get("displayName"),
+                    "displayName": user.get("displayName"),
+                    "userPrincipalName": user.get("userPrincipalName"),
+                    "mail": user.get("mail") or user.get("userPrincipalName"),
+                    "objectId": user.get("id"),
+                    "identityType": "User",
+                }
+            )
         )
     return {"count": len(rows), "users": rows}
 
@@ -213,14 +216,20 @@ def list_entra_users(limit: int = 20) -> dict:
 @read_only_tool()
 def list_azure_role_assignments(limit: int = 50) -> dict:
     """Lista role assignments Azure RBAC (User, Group, Service Principal e Managed Identity)."""
-    rows = azure_list_role_assignments()[: max(1, min(int(limit), 200))]
+    rows = [
+        sanitize_assignment(row)
+        for row in azure_list_role_assignments()[: max(1, min(int(limit), 200))]
+    ]
     return {"count": len(rows), "assignments": rows}
 
 
 @read_only_tool()
 def list_privileged_azure_role_assignments(limit: int = 50) -> dict:
     """Lista role assignments privilegiados em Azure RBAC (Owner, User Access Administrator, Contributor)."""
-    rows = azure_list_privileged_role_assignments()[: max(1, min(int(limit), 200))]
+    rows = [
+        sanitize_assignment(row)
+        for row in azure_list_privileged_role_assignments()[: max(1, min(int(limit), 200))]
+    ]
     return {"count": len(rows), "assignments": rows}
 
 

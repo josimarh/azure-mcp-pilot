@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import httpx
 
@@ -30,6 +30,7 @@ from services.graph_capabilities import (
     get_capability,
     is_write_operation,
 )
+from services.azure_graph import is_mock_mode as _is_mock_mode
 
 MAX_PAGE_SIZE = 999
 DEFAULT_LIMIT = 100
@@ -109,6 +110,11 @@ def _resolve_capability(capability_id: str) -> Capability:
     return cap
 
 
+# Endpoints singleton (sem coleção) onde GET é válido mesmo sem {id} no path,
+# pois o próprio endpoint já identifica um único recurso (ex.: o tenant atual).
+SINGLETON_GET_CAPABILITIES = frozenset({"graph.organization.get"})
+
+
 def _assert_read_only(cap: Capability, operation: str) -> None:
     if is_write_operation(operation):
         raise CapabilityError(
@@ -130,6 +136,16 @@ def _assert_read_only(cap: Capability, operation: str) -> None:
         raise CapabilityError(
             "POST só é permitido para consultas de leitura em lote conhecidas.",
             kind="write_blocked",
+        )
+    if (
+        operation == "get"
+        and "{id}" not in cap.endpoint
+        and cap.id not in SINGLETON_GET_CAPABILITIES
+    ):
+        raise CapabilityError(
+            f"A capability '{cap.id}' é de coleção (endpoint sem '{{id}}') e não "
+            "suporta a operação 'get'. Use 'list' para consultá-la.",
+            kind="unsupported_operation",
         )
 
 
@@ -228,6 +244,29 @@ def _validate_limit(limit: int | None) -> int:
     return min(value, HARD_LIMIT)
 
 
+def _validate_subscriptions(value: Any) -> list[str] | None:
+    if value is None or value == "":
+        return None
+    raw_values = value.split(",") if isinstance(value, str) else value
+    if not isinstance(raw_values, (list, tuple, set)):
+        raise CapabilityError(
+            "Parâmetro 'subscriptions' deve ser uma lista de IDs ou uma string separada por vírgulas.",
+            kind="invalid_input",
+        )
+    subscriptions = [str(item).strip() for item in raw_values if str(item).strip()]
+    if not subscriptions:
+        raise CapabilityError("Parâmetro 'subscriptions' não pode ser vazio.", kind="invalid_input")
+    if not _is_mock_mode():
+        invalid = [item for item in subscriptions if not GUID_RE.fullmatch(item)]
+        if invalid:
+            raise CapabilityError(
+                "Cada subscription deve ser um GUID válido.",
+                kind="invalid_input",
+                details={"invalid_subscriptions": invalid},
+            )
+    return subscriptions
+
+
 def _reject_unknown_params(cap: Capability, params: dict[str, Any]) -> None:
     control_params = {"limit", "id", "scope", "ids", "types", "query", "operation"}
     declared = {p.lstrip("$").lower() for p in cap.supported_params}
@@ -294,7 +333,131 @@ def _classify_http_error(cap: Capability, status_code: int, detail: str) -> Capa
 # --------------------------------------------------------------------------
 
 
+def _mock_graph_rows(cap: Capability, url: str, limit: int) -> list[dict[str, Any]]:
+    """Executa capabilities Graph contra fixtures sem inicializar autenticação."""
+    from services.iam_common import load_mock_iam
+
+    data = load_mock_iam()
+    parsed = urlparse(url)
+    path = parsed.path.rstrip("/")
+    query = parse_qs(parsed.query)
+
+    if cap.id == "graph.users.list":
+        rows = list(data.get("users", []))
+    elif cap.id == "graph.users.guests":
+        rows = [row for row in data.get("users", []) if row.get("userType") == "Guest"]
+    elif cap.id == "graph.groups.list":
+        rows = list(data.get("groups", []))
+    elif cap.id == "graph.service_principals.list":
+        rows = list(data.get("service_principals", []))
+    elif cap.id == "graph.service_principals.managed_identities":
+        rows = [
+            row
+            for row in data.get("service_principals", [])
+            if row.get("servicePrincipalType") == "ManagedIdentity"
+        ]
+    elif cap.id == "graph.applications.list":
+        rows = list(data.get("applications", []))
+    elif cap.id == "graph.conditional_access.policies":
+        rows = list(data.get("conditional_access_policies", []))
+    elif cap.id == "graph.groups.members":
+        match = re.search(r"/groups/([^/]+)/members$", path)
+        if not match:
+            raise CapabilityError(
+                "O identificador do grupo é obrigatório para consultar membros no modo mock.",
+                kind="invalid_input",
+            )
+        group_id = unquote(match.group(1))
+        users = {str(row.get("id")): row for row in data.get("users", [])}
+        rows = [
+            {
+                "id": member.get("memberId"),
+                "displayName": users.get(str(member.get("memberId")), {}).get("displayName"),
+                "userPrincipalName": users.get(str(member.get("memberId")), {}).get("userPrincipalName"),
+                "mail": users.get(str(member.get("memberId")), {}).get("mail"),
+            }
+            for member in data.get("group_memberships", [])
+            if str(member.get("groupId")) == group_id
+        ]
+    elif cap.id == "graph.groups.transitive_membership":
+        match = re.search(r"/users/([^/]+)/transitiveMemberOf$", path)
+        if not match:
+            raise CapabilityError(
+                "O identificador do usuário é obrigatório para consultar grupos no modo mock.",
+                kind="invalid_input",
+            )
+        user_id = unquote(match.group(1))
+        group_ids = {
+            str(member.get("groupId"))
+            for member in data.get("group_memberships", [])
+            if str(member.get("memberId")) == user_id
+        }
+        rows = [row for row in data.get("groups", []) if str(row.get("id")) in group_ids]
+    elif cap.id == "graph.directory_roles.list":
+        role_names = sorted(
+            {str(row.get("roleName")) for row in data.get("directory_role_assignments", []) if row.get("roleName")}
+        )
+        rows = [
+            {
+                "id": f"mock-role-{index}",
+                "displayName": role_name,
+                "roleTemplateId": f"mock-template-{index}",
+            }
+            for index, role_name in enumerate(role_names, start=1)
+        ]
+    elif cap.id == "graph.directory_roles.members":
+        role_match = re.search(r"/directoryRoles/([^/]+)/members$", path)
+        role_index = None
+        if role_match:
+            role_id = unquote(role_match.group(1))
+            role_id_match = re.fullmatch(r"mock-role-(\d+)", role_id)
+            role_index = int(role_id_match.group(1)) if role_id_match else None
+        role_names = sorted(
+            {str(row.get("roleName")) for row in data.get("directory_role_assignments", []) if row.get("roleName")}
+        )
+        selected_role = role_names[role_index - 1] if role_index and role_index <= len(role_names) else None
+        if selected_role is None:
+            raise CapabilityError(
+                "A role de diretório informada não existe no fixture do MOCK_MODE.",
+                kind="not_found",
+            )
+        users = {str(row.get("id")): row for row in data.get("users", [])}
+        rows = [
+            {
+                "id": assignment.get("principalId"),
+                "displayName": users.get(str(assignment.get("principalId")), {}).get("displayName"),
+                "userPrincipalName": users.get(str(assignment.get("principalId")), {}).get("userPrincipalName"),
+                "mail": users.get(str(assignment.get("principalId")), {}).get("mail"),
+            }
+            for assignment in data.get("directory_role_assignments", [])
+            if assignment.get("roleName") == selected_role
+        ]
+    else:
+        raise CapabilityError(
+            f"A capability '{cap.id}' não possui fixture Graph no MOCK_MODE. "
+            "Defina MOCK_MODE=false para consultar o tenant real.",
+            kind="mock_not_supported",
+            details={"capability_id": cap.id, "mock_mode": True},
+        )
+
+    filter_expr = unquote((query.get("$filter") or [""])[0]).lower()
+    if "serviceprincipaltype" in filter_expr and "managedidentity" in filter_expr:
+        rows = [row for row in rows if row.get("servicePrincipalType") == "ManagedIdentity"]
+    if "usertype" in filter_expr and "guest" in filter_expr:
+        rows = [row for row in rows if row.get("userType") == "Guest"]
+    equality_filters = re.findall(r"([A-Za-z][A-Za-z0-9]*)\s+eq\s+'([^']*)'", filter_expr)
+    for field_name, expected in equality_filters:
+        if field_name.lower() in {"serviceprincipaltype", "usertype"}:
+            continue
+        rows = [row for row in rows if str(row.get(field_name, "")).lower() == expected.lower()]
+
+    return rows[:limit]
+
+
 def _graph_get(cap: Capability, url: str, limit: int) -> list[dict[str, Any]]:
+    if _is_mock_mode():
+        return _mock_graph_rows(cap, url, limit)
+
     from services.iam_common import graph_list
 
     try:
@@ -303,6 +466,26 @@ def _graph_get(cap: Capability, url: str, limit: int) -> list[dict[str, Any]]:
         match = re.search(r"HTTP (\d{3})", str(exc))
         status = int(match.group(1)) if match else 500
         raise _classify_http_error(cap, status, str(exc)) from exc
+
+
+def _mock_resource_graph_rows(
+    query: str,
+    subscriptions: list[str] | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    from services.azure_graph import _load_mock
+
+    rows = list(_load_mock())
+    if subscriptions is not None:
+        allowed = {str(item) for item in subscriptions}
+        rows = [row for row in rows if str(row.get("subscriptionId")) in allowed]
+
+    lowered = query.lower()
+    type_match = re.search(r"type\s*(?:=~|==|=)\s*['\"]([^'\"]+)['\"]", lowered)
+    if type_match:
+        expected_type = type_match.group(1).lower()
+        rows = [row for row in rows if str(row.get("type", "")).lower() == expected_type]
+    return rows[:limit]
 
 
 def _azure_management_get(cap: Capability, url: str, limit: int) -> list[dict[str, Any]]:
@@ -338,7 +521,7 @@ def _build_graph_url(cap: Capability, params: dict[str, Any]) -> str:
 
     select = _validate_select(cap, str(params.get("select") or params.get("$select") or ""))
     if select:
-        query.append(f"$select={select}")
+        query.append("$select=" + quote(select, safe="/,"))
 
     filter_expr = _validate_filter(cap, str(params.get("filter") or params.get("$filter") or ""))
     if filter_expr:
@@ -358,6 +541,7 @@ def _execute_resource_graph(cap: Capability, params: dict[str, Any], limit: int)
     from services.azure_graph import _query_resource_graph
 
     query = str(params.get("query") or "").strip()
+    subscriptions = _validate_subscriptions(params.get("subscriptions"))
     if not query:
         raise CapabilityError(
             f"A capability '{cap.id}' exige o parâmetro 'query' (KQL do Resource Graph).",
@@ -373,7 +557,10 @@ def _execute_resource_graph(cap: Capability, params: dict[str, Any], limit: int)
                 kind="invalid_input",
             )
     try:
-        rows = _query_resource_graph(query)
+        if _is_mock_mode():
+            rows = _mock_resource_graph_rows(query, subscriptions, limit)
+        else:
+            rows = _query_resource_graph(query, subscriptions=subscriptions)
     except RuntimeError as exc:
         match = re.search(r"HTTP (\d{3})", str(exc))
         status = int(match.group(1)) if match else 500
@@ -429,6 +616,7 @@ def execute_capability(
         "resource": cap.resource,
         "operation": operation,
         "api_version": cap.api_version,
+        "execution_mode": "mock" if _is_mock_mode() else "live",
         "executed_endpoint": executed,
         "support_status": cap.support_status,
         "requires_license": cap.requires_license,

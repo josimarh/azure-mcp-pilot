@@ -40,7 +40,7 @@ This applies to licensing too: zero conditional access policies means something 
 
 ### Read-only by construction
 
-Only `GET`, `LIST`, `QUERY`, `ASSESS`, and `CORRELATE`. There is no LLM-generated KQL and no free-form endpoint: every query goes through a capability registry with an allowlist and validation of filters and scopes.
+Only `GET`, `LIST`, `QUERY`, `ASSESS`, and `CORRELATE`. The `graph_query` tool can receive read-only KQL generated from a user request, but it does not accept arbitrary endpoints: the capability registry selects the data source, and the executor blocks mutation operators and external-access constructs before sending the query.
 
 ## Architecture
 

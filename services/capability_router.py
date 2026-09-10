@@ -119,7 +119,10 @@ DOMAIN_SIGNALS: dict[str, tuple[str, ...]] = {
         "resource group",
         "recurso azure",
         "escopo azure",
-        "owner",
+        "owner no azure",
+        "owner na subscription",
+        "owner nas subscriptions",
+        "role owner",
         "contributor",
         "user access administrator",
     ),
@@ -168,6 +171,10 @@ DOMAIN_SIGNALS: dict[str, tuple[str, ...]] = {
         "criadas pelos usuarios",
         "criada no tenant",
         "criadas no tenant",
+        "criada no meu tenant",
+        "criadas no meu tenant",
+        "aplicacao criada no meu tenant",
+        "aplicacoes criadas no meu tenant",
         "aplicacao nativa",
         "aplicacoes nativas",
         "nativa da microsoft",
@@ -357,6 +364,11 @@ def _score_capability(cap: Capability, text: str) -> tuple[float, list[str]]:
     # Desambiguação Graph x Azure
     has_azure_ctx = any(normalize_text(t) in text for t in AZURE_CONTEXT_TERMS)
     has_dir_ctx = any(normalize_text(t) in text for t in DIRECTORY_CONTEXT_TERMS)
+
+    # "Owner" também é usado para ownership de aplicações e workloads.
+    # Sem contexto Azure, não deixe o termo isolado selecionar Azure RBAC.
+    if cap.domain == "azure_rbac" and "owner" in text and not has_azure_ctx:
+        score -= 2.0
 
     if cap.source in AZURE_SOURCES:
         if has_azure_ctx:

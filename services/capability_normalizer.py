@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from services.azure_graph import sanitize_enabled
 from services.graph_capabilities import (
     SOURCE_AZURE_AUTHORIZATION,
     SOURCE_AZURE_MANAGEMENT,
@@ -16,6 +17,7 @@ from services.graph_capabilities import (
     SOURCE_RESOURCE_GRAPH,
     Capability,
 )
+from services.iam_common import mask, sanitize_assignment, sanitize_scope
 
 # Tipos normalizados de principal
 PRINCIPAL_USER = "User"
@@ -105,6 +107,27 @@ def _first(row: dict[str, Any], *keys: str) -> Any:
     return None
 
 
+def _sanitize_normalized(normalized: dict[str, Any]) -> dict[str, Any]:
+    """Mascara identificadores no objeto normalizado quando SANITIZE_FOR_LLM=true.
+
+    A normalização copia id/userPrincipalName/mail/scope do row bruto para o
+    nível superior do objeto retornado ao modelo; sem isso, esses campos
+    escapavam da sanitização mesmo quando ``raw`` já estava mascarado.
+    """
+    if not sanitize_enabled():
+        return normalized
+    out = dict(normalized)
+    if out.get("id"):
+        out["id"] = mask(str(out["id"]), "obj")
+    if out.get("userPrincipalName"):
+        out["userPrincipalName"] = mask(str(out["userPrincipalName"]), "upn")
+    if out.get("mail"):
+        out["mail"] = mask(str(out["mail"]), "mail")
+    if out.get("scope"):
+        out["scope"] = sanitize_scope(str(out["scope"]))
+    return out
+
+
 def normalize_row(row: dict[str, Any], cap: Capability) -> dict[str, Any]:
     """Converte um item bruto em um objeto de identidade normalizado."""
     if not isinstance(row, dict):
@@ -170,8 +193,8 @@ def normalize_row(row: dict[str, Any], cap: Capability) -> dict[str, Any]:
         if extra in row and row.get(extra) not in (None, ""):
             normalized.setdefault(extra, row.get(extra))
 
-    normalized["raw"] = row
-    return normalized
+    normalized["raw"] = sanitize_assignment(dict(row))
+    return _sanitize_normalized(normalized)
 
 
 def normalize_rows(rows: Iterable[dict[str, Any]], cap: Capability) -> list[dict[str, Any]]:

@@ -100,11 +100,17 @@ def get_home_tenant_id() -> str | None:
 
 
 def reset_credential() -> None:
-    """Descarta credencial e tokens em cache (usar após trocar de conta/tenant)."""
+    """Descarta credencial, tokens e resultados de consulta em cache.
+
+    Usar após trocar de conta/tenant: como as chaves do cache de consultas
+    não incluem tenant/conta, mantê-lo intacto permitiria reaproveitar
+    resultados do tenant anterior durante o TTL restante.
+    """
     global _credential
     with _lock:
         _credential = None
         _token_cache.clear()
+    clear_query_cache()
 
 
 def query_cache_ttl() -> int:

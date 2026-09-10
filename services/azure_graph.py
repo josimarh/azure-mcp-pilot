@@ -101,18 +101,25 @@ def _discover_subscriptions_uncached(token: str) -> list[str]:
     return subscriptions
 
 
-def _query_resource_graph(query: str) -> list[dict[str, Any]]:
-    return cached_query(f"arg::{query}", lambda: _query_resource_graph_uncached(query))
+def _query_resource_graph(query: str, subscriptions: list[str] | None = None) -> list[dict[str, Any]]:
+    subscription_key = ",".join(subscriptions or [])
+    return cached_query(
+        f"arg::{query}::{subscription_key}",
+        lambda: _query_resource_graph_uncached(query, subscriptions),
+    )
 
 
-def _query_resource_graph_uncached(query: str) -> list[dict[str, Any]]:
+def _query_resource_graph_uncached(
+    query: str,
+    subscriptions: list[str] | None = None,
+) -> list[dict[str, Any]]:
     token = get_arm_token()
     body: dict[str, Any] = {"query": query}
-    subscriptions = _subscriptions()
-    if subscriptions is None:
-        subscriptions = _discover_subscriptions(token)
-    if subscriptions:
-        body["subscriptions"] = subscriptions
+    selected_subscriptions = subscriptions if subscriptions is not None else _subscriptions()
+    if selected_subscriptions is None:
+        selected_subscriptions = _discover_subscriptions(token)
+    if selected_subscriptions:
+        body["subscriptions"] = selected_subscriptions
 
     with httpx.Client(timeout=30.0) as client:
         response = client.post(
