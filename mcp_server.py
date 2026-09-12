@@ -114,10 +114,16 @@ mcp = MCPServer(
     ),
 )
 
-# Todas as tools deste servidor são somente leitura por design. A anotação
-# readOnlyHint evita que o cliente MCP peça confirmação a cada chamada.
+# Todas as tools deste servidor são somente leitura por design. As quatro
+# annotations MCP são declaradas explicitamente para que diretórios/clients MCP
+# possam confiar no trust scoring sem inferir comportamento:
+# - readOnlyHint=True: nunca modifica estado do ambiente.
+# - destructiveHint=False: nenhuma operação é destrutiva (decorre do read-only).
+# - idempotentHint=True: chamadas repetidas com os mesmos args não têm efeito colateral.
+# - openWorldHint=True: consulta sistemas externos (Microsoft Graph/Azure), não um domínio fechado.
 _READ_ONLY = ToolAnnotations(
     readOnlyHint=True,
+    destructiveHint=False,
     idempotentHint=True,
     openWorldHint=True,
 )

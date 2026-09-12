@@ -2,17 +2,15 @@ include LICENSE
 include README.md
 recursive-include services/data *.json
 
-# O pacote publicado expõe apenas o servidor MCP. O portal Streamlit e o
-# orquestrador de chat existem no repositório para desenvolvimento e demo,
+# O pacote publicado expõe apenas o servidor MCP. Os arquivos de teste e
+# scripts de release existem no repositório para desenvolvimento e CI,
 # e não fazem parte da superfície distribuída.
-exclude app.py
-exclude agent.py
-exclude launcher.py
 exclude test_smoke.py
+exclude test_tool_annotations.py
+exclude test_tool_catalog_smoke.py
+exclude test_capability_layer.py
 exclude requirements.txt
-exclude Dockerfile
 exclude .env.example
-prune .streamlit
 prune .agents
 prune assets
 prune .vscode

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.0
+
+Revisão de compatibilidade e trust scoring para diretórios MCP.
+
+### Adicionado
+
+- `ToolAnnotations` agora declara explicitamente as quatro anotações MCP (`readOnlyHint=True`,
+  `destructiveHint=False`, `idempotentHint=True`, `openWorldHint=True`) para as 66 tools, centralizado no
+  wrapper único `read_only_tool` (sem repetição por tool).
+- `test_tool_annotations.py`: teste parametrizado que enumera todas as tools registradas via
+  `mcp._tool_manager` e falha se qualquer uma não tiver as quatro anotações definidas explicitamente.
+- `test_tool_catalog_smoke.py`: smoke/contract test catalog-driven que descobre todas as tools em tempo
+  de execução, deriva argumentos mínimos válidos a partir do JSON Schema de cada tool e as executa via
+  `mcp.Client` em `MOCK_MODE=true`, garantindo cobertura de smoke test para 100% das tools públicas.
+- CI (`ci.yml`) e release (`release.yml`) agora rodam `test_capability_layer.py`,
+  `test_tool_annotations.py` e `test_tool_catalog_smoke.py`, além do `test_smoke.py` já existente.
+
+### Removido
+
+- Arquitetura legada baseada em Streamlit/OpenRouter (`agent.py`, `app.py`, `launcher.py`,
+  `.streamlit/`, `Dockerfile`), desacoplada do servidor MCP e não utilizada pelo pacote publicado. O
+  produto atual usa exclusivamente o modelo fornecido pelo cliente MCP/GitHub Copilot.
+- Variáveis `OPENROUTER_*` e `AGENT_MODE` de `.env.example`; dependência `streamlit` de
+  `requirements.txt` (substituída por `pytest`, usado pela nova suíte de testes).
+- Regras de empacotamento mortas em `MANIFEST.in` referentes aos arquivos removidos.
+
 ## 0.1.5
 
 Hardening da capability layer (`graph_get`/`graph_list`/`graph_query`) após revisão completa de arquitetura.

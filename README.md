@@ -167,7 +167,14 @@ cp .env.example .env
 python test_smoke.py
 ```
 
-The smoke test runs in mock mode and never touches a tenant.
+All tests run in mock mode and never touch a tenant:
+
+```bash
+python test_smoke.py
+python test_capability_layer.py
+python test_tool_annotations.py
+python test_tool_catalog_smoke.py
+```
 
 ### Repository layout
 
@@ -184,11 +191,7 @@ services/data/                      mock data used when MOCK_MODE=true
 extension/                          VS Code extension (TypeScript)
 ```
 
-The repository also contains a Streamlit portal (`app.py` + `agent.py`) used for development and demos. It is not part of the published package, whose surface is the MCP server only:
-
-```bash
-streamlit run app.py
-```
+The published package's surface is the MCP server only — there is no bundled UI or chat orchestrator; the model comes from your own Copilot/MCP client.
 
 ## Known limitations
 

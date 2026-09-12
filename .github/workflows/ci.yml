@@ -27,6 +27,15 @@ jobs:
       - name: Smoke test
         run: python test_smoke.py
 
+      - name: Capability layer test
+        run: python test_capability_layer.py
+
+      - name: Tool annotations contract test
+        run: python test_tool_annotations.py
+
+      - name: Tool catalog smoke test
+        run: python test_tool_catalog_smoke.py
+
       - name: Check version sync
         run: python scripts/set_version.py --check
 
